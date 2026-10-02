@@ -1,0 +1,1157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="QC Verify 2">
+<meta name="theme-color" content="#0E6B66">
+<title>QC Verifier 2 (Code List 2)</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="icon-any.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+<style>
+:root{
+  --bg:#D9DEE2; --panel:#F3F5F6; --card:#FFFFFF; --ink:#172026; --ink2:#4E5A63; --line:#BCC5CC;
+  --blue:#1E50A2; --blue-ink:#FFFFFF; --blue-soft:#DCE6F6;
+  --tape:#F4C20D; --tape-ink:#1B1B12;
+  --pass:#17803D; --pass-bg:#E2F3E7; --fail:#C8261F; --fail-bg:#FBE4E2; --warn:#A86A00; --warn-bg:#FFF0D2;
+  --focus:#1F5FBF;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"Barlow","Segoe UI",Roboto,Arial,sans-serif;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121619; --panel:#1B2126; --card:#232B31; --ink:#E8ECEE; --ink2:#A3AEB6; --line:#34404A;
+    --blue:#7BA4EE; --blue-ink:#0E1A2E; --blue-soft:#1C2B44;
+    --pass:#5CCB7E; --pass-bg:#14301E; --fail:#FF7B70; --fail-bg:#3A1A18; --warn:#F0B44C; --warn-bg:#352812; --focus:#8FB6FF;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121619; --panel:#1B2126; --card:#232B31; --ink:#E8ECEE; --ink2:#A3AEB6; --line:#34404A;
+  --blue:#7BA4EE; --blue-ink:#0E1A2E; --blue-soft:#1C2B44;
+  --pass:#5CCB7E; --pass-bg:#14301E; --fail:#FF7B70; --fail-bg:#3A1A18; --warn:#F0B44C; --warn-bg:#352812; --focus:#8FB6FF;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 17px/1.45 var(--body);-webkit-text-size-adjust:100%}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.hidden{display:none!important}
+.wrap{max-width:1360px;margin:0 auto;padding:10px 16px 40px}
+
+/* header */
+.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:6px 0 10px;border-bottom:3px solid var(--ink)}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.brand img{width:46px;height:46px;border-radius:11px}
+.brand b{display:block;font:800 28px/1 var(--display);letter-spacing:.2px}
+.brand small{display:block;font:500 14px/1.3 var(--body);color:var(--ink2)}
+.tally{display:flex;gap:6px}
+.tally span{font:700 17px/1 var(--display);padding:8px 10px;border-radius:8px;background:var(--panel);border:1px solid var(--line);white-space:nowrap}
+.tally .p{color:var(--pass)} .tally .f{color:var(--fail)} .tally .m{color:var(--warn)}
+.pill{border:1.5px solid var(--line);background:var(--panel);border-radius:999px;padding:8px 14px;min-height:44px;font-size:14px;font-weight:600;cursor:pointer}
+.pill.ok{border-color:var(--pass);color:var(--pass)} .pill.wait{border-color:var(--warn);color:var(--warn)} .pill.off{color:var(--ink2)}
+.userchip{display:flex;align-items:center;gap:8px;font-weight:600}
+.listinfo{font-size:14px;color:var(--ink2);margin-top:8px}
+
+/* layout */
+.grid{display:grid;grid-template-columns:minmax(300px,370px) 1fr;gap:16px;margin-top:12px;align-items:start}
+@media (max-width:900px){.grid{grid-template-columns:minmax(0,1fr)}}
+.grid>*,.side>*{min-width:0}
+@media (max-width:480px){.readrow .btn{min-width:96px}.readrow input{font-size:32px}.top .brand b{font-size:23px}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+.side{display:grid;gap:16px}
+h2{font:700 23px/1.1 var(--display);margin:0 0 12px}
+label.f{display:block;font-size:14px;color:var(--ink2);margin:14px 0 4px}
+input[type=text],input[type=search],input[type=url],input[type=password],select{width:100%;min-height:48px;padding:10px 12px;border:1.5px solid var(--line);border-radius:8px;background:var(--card)}
+input:focus,select:focus{border-color:var(--focus);outline:none}
+
+.seg{display:grid;grid-template-columns:1fr 1fr;border:1.5px solid var(--ink);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:var(--card);padding:10px 12px;min-height:60px;cursor:pointer;text-align:left;line-height:1.2}
+.seg button b{display:block;font:700 22px/1 var(--display)}
+.seg button span{font-size:13px;color:var(--ink2)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.seg button[aria-pressed="true"] span{color:var(--bg);opacity:.8}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.chips button{border:1.5px solid var(--line);background:var(--card);border-radius:999px;padding:6px 12px;min-height:40px;cursor:pointer;font-size:14px}
+.chips button[aria-pressed="true"]{border-color:var(--blue);background:var(--blue);color:var(--blue-ink);font-weight:600}
+.picklist{max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:6px;background:var(--card)}
+.picklist button{display:grid;grid-template-columns:104px 1fr auto;gap:8px;align-items:center;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:none;padding:10px 12px;cursor:pointer;min-height:52px}
+.picklist button:last-child{border-bottom:0}
+.picklist .m{font:700 18px/1.2 var(--display)} .picklist .d{font-size:14px;color:var(--ink2)}
+.picklist .need{display:flex;gap:3px}
+.need i{font:700 12px/1 var(--display);font-style:normal;padding:4px 5px;border-radius:4px;background:var(--tape);color:var(--tape-ink)}
+
+/* picked model: spec card */
+.spec{border:2px solid var(--ink);border-radius:12px;background:var(--card);margin-top:10px;overflow:hidden}
+.spec .hd{padding:12px 14px 10px}
+.spec .m{font:800 34px/1 var(--display)}
+.spec .d{font-size:14px;color:var(--ink2);margin-top:4px}
+.spec dl{margin:0;display:grid;grid-template-columns:auto 1fr;border-top:1px solid var(--line)}
+.spec dt,.spec dd{margin:0;padding:8px 14px;border-bottom:1px solid var(--line)}
+.spec dt{font-size:14px;color:var(--ink2)}
+.spec dd{font:700 21px/1.1 var(--display);letter-spacing:.5px;text-align:right}
+.spec dd small{font:500 14px var(--body);color:var(--ink2);letter-spacing:0}
+.spec dd.na{color:var(--ink2);font-weight:500}
+.spec dd.blind{color:var(--blue)}
+.spec .ft{padding:4px 8px}
+
+/* step rail */
+.rail{list-style:none;margin:0 0 12px;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.rail li{min-width:0}.rail button>span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.rail button{width:100%;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;text-align:left;border:2px solid var(--line);background:var(--card);border-radius:12px;padding:10px 12px;min-height:76px;cursor:pointer}
+.rail .n{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;font:800 22px/1 var(--display);background:var(--bg);color:var(--ink2)}
+.rail .t,.rail .s{display:block}
+.rail .t{font:700 20px/1 var(--display)} .rail .s{font-size:13px;color:var(--ink2);margin-top:3px;line-height:1.2}
+.rail img{width:46px;height:46px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+.rail button[aria-current="step"]{border-color:var(--ink);box-shadow:inset 0 -5px 0 var(--tape)}
+.rail button[aria-current="step"] .n{background:var(--tape);color:var(--tape-ink)}
+.rail button.done .n{background:var(--pass);color:#fff}
+.rail button.bad .n{background:var(--fail);color:#fff}
+.rail button.ent .n{background:var(--ink);color:var(--bg)}
+.rail button.bad{border-color:var(--fail)}
+.rail button.minor .n{background:var(--warn);color:#fff}
+.rail button.minor{border-color:var(--warn)}
+.rail button.na{background:repeating-linear-gradient(-45deg,var(--panel) 0 8px,var(--card) 8px 16px);cursor:default}
+.rail button.na .t{color:var(--ink2);text-decoration:line-through;text-decoration-thickness:2px}
+.rail button:disabled{cursor:default}
+@media (max-width:620px){.rail button{grid-template-columns:auto minmax(0,1fr);min-height:64px;padding:8px;gap:6px}.rail .n{width:30px;height:30px;font-size:18px}.rail .t{font-size:17px}.rail img{display:none}.rail .s{display:none}}
+
+/* camera */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1.5px solid var(--ink);background:var(--card);border-radius:10px;padding:10px 16px;min-height:52px;font-weight:600;cursor:pointer;text-decoration:none}
+.btn.primary{background:var(--blue);border-color:var(--blue);color:var(--blue-ink)}
+.btn.dark{background:var(--ink);color:var(--bg)}
+.btn.small{min-height:42px;padding:6px 12px;font-size:15px}
+.btn.link{border-color:transparent;background:none;text-decoration:underline;padding:6px 4px;min-height:40px}
+.btn.big{min-height:84px;font:700 26px/1 var(--display);width:100%}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.camwrap{position:relative;border-radius:12px;overflow:hidden;background:#000;display:none}
+.camwrap.on{display:block}
+.camwrap video{display:block;width:100%;max-height:54vh;object-fit:cover;transition:max-height .25s}
+.camwrap.mini video{max-height:18vh}
+.ov{position:absolute;inset:0;pointer-events:none}
+.ov.scan .band{position:absolute;left:8%;right:8%;top:32%;bottom:32%;border:3px solid rgba(255,255,255,.9);border-radius:6px;box-shadow:0 0 0 999px rgba(0,0,0,.35)}
+.ov.scan .band::after{content:"";position:absolute;left:0;right:0;top:50%;height:2px;background:#ff3b30;opacity:.85}
+.ov.photo::before{content:"";position:absolute;left:50%;top:10%;bottom:10%;width:3px;margin-left:-1.5px;background:var(--tape);box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+.ov.photo .frame{position:absolute;left:18%;right:18%;top:14%;bottom:14%;border:2px dashed rgba(255,255,255,.75);border-radius:10px}
+.ov .hint{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:rgba(0,0,0,.66);color:#fff;font-weight:600;font-size:15px;padding:6px 12px;border-radius:999px;white-space:nowrap;max-width:94%;overflow:hidden;text-overflow:ellipsis}
+.ov .hint:empty{display:none}
+.camctl{position:absolute;left:8px;right:8px;bottom:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;pointer-events:none}
+.camctl>*{pointer-events:auto}
+.camctl .btn{min-height:44px;background:rgba(255,255,255,.94);color:#111;border-color:#fff}
+.camctl .btn.on{background:var(--tape);border-color:var(--tape)}
+.camctl .zoom{margin-right:auto;display:flex;align-items:center;gap:6px;background:rgba(0,0,0,.55);color:#fff;border-radius:999px;padding:4px 12px;font-size:14px;font-weight:600}
+.camctl .zoom input{width:120px;accent-color:var(--tape)}
+.shutter{position:absolute;z-index:2;width:92px;height:92px;border-radius:50%;border:6px solid #fff;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.45);
+  --p:0;background:conic-gradient(var(--pass) calc(var(--p) * 1turn),var(--tape) 0)}
+.shutter.left{left:14px;top:50%;transform:translateY(-50%)}
+.shutter.right{right:14px;top:50%;transform:translateY(-50%)}
+.shutter.center{left:50%;bottom:64px;transform:translateX(-50%)}
+.shutter:active{scale:.93}
+.shutter.locked{background:#8A9096;border-color:#D5D9DC;box-shadow:none}
+.ov.photo.seen::before{background:#22C55E;width:5px;margin-left:-2.5px}
+.ov .chip{position:absolute;left:12px;top:12px;padding:5px 10px;border-radius:8px;font-weight:700;font-size:14px;background:rgba(0,0,0,.66);color:#fff}
+.ov .chip.ok{background:#17803D}
+.ov .chip:empty{display:none}
+.focusbox{position:absolute;width:76px;height:76px;margin:-38px 0 0 -38px;border:2px solid var(--tape);border-radius:8px;pointer-events:none;opacity:0;transition:opacity .6s}
+.focusbox.on{opacity:1;transition:none}
+.shutter span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.status{margin-top:10px;font-size:15px;min-height:22px}
+.alt{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+
+/* measurement entry */
+.measure{margin-top:12px;border:2px solid var(--ink);border-radius:12px;background:var(--card);padding:14px;display:grid;grid-template-columns:minmax(160px,260px) 1fr;gap:16px}
+@media (max-width:700px){.measure{grid-template-columns:1fr}}
+.measure .shot{position:relative;border-radius:8px;overflow:hidden;background:#000;align-self:start;cursor:zoom-in;border:0;padding:0}
+.measure .shot img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover}
+.measure .shot span{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.65);color:#fff;font-size:13px;padding:3px 8px;border-radius:6px}
+.mtitle{font:700 24px/1.1 var(--display)}
+.mspec{color:var(--ink2);font-size:15px;margin-top:2px}
+.readrow{display:flex;gap:8px;align-items:stretch;margin-top:12px}
+.readrow .in{position:relative;flex:1}
+.readrow input{font:700 40px/1 var(--display);letter-spacing:1px;min-height:68px;padding-right:56px}
+.readrow .u{position:absolute;right:14px;top:50%;transform:translateY(-50%);font:600 20px var(--display);color:var(--ink2)}
+.readrow .btn{min-width:130px;font:700 22px/1 var(--display)}
+.mnote{font-size:14px;color:var(--ink2);margin-top:8px}
+
+/* the tape gauge */
+.gauge{margin-top:12px}
+.gauge svg{display:block;width:100%;height:auto;max-height:124px}
+.gauge .needle{transition:transform .35s cubic-bezier(.3,1.4,.5,1)}
+@media (prefers-reduced-motion:reduce){.gauge .needle{transition:none}}
+.gmsg{font-weight:700;font-size:16px;margin-top:4px;min-height:24px}
+.gmsg.ok{color:var(--pass)} .gmsg.bad{color:var(--fail)}
+
+/* verdict */
+.verdict{margin-top:12px;background:var(--card);border:2px solid var(--ink);border-radius:8px;position:relative;overflow:hidden}
+.verdict::before{content:"";position:absolute;inset:0 auto 0 0;width:14px;background:var(--line)}
+.verdict.pass::before{background:var(--pass)} .verdict.fail::before{background:var(--fail)} .verdict.warn::before,.verdict.minor::before{background:var(--warn)}
+.vin{padding:14px 16px 16px 30px}
+.vword{font:800 clamp(54px,10vw,108px)/.9 var(--display)}
+.verdict.pass .vword{color:var(--pass)} .verdict.fail .vword{color:var(--fail)} .verdict.warn .vword,.verdict.minor .vword{color:var(--warn)}
+.verdict.idle .vword{font-size:clamp(34px,6vw,54px);color:var(--ink2)}
+.vwhy{font:600 20px/1.25 var(--body);margin-top:6px}
+.checks{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:8px}
+.checks li{display:grid;grid-template-columns:34px 1fr;gap:10px;align-items:start;padding:10px 12px;border-radius:8px;background:var(--panel)}
+.checks .ic{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font:800 20px/1 var(--display);color:#fff}
+.checks .ok .ic{background:var(--pass)} .checks .bad .ic{background:var(--fail)} .checks .skip .ic{background:var(--line);color:var(--ink2)}
+.checks .bad{background:var(--fail-bg)}
+.checks .minor .ic{background:var(--warn)} .checks .minor{background:var(--warn-bg)}
+.checks .minor span.oot{color:var(--warn);font-weight:700}
+.checks b{font:700 21px/1.15 var(--display);display:block}
+.checks span{font-size:15px;color:var(--ink2)}
+.checks .bad span.oot{color:var(--fail);font-weight:700}
+.checks .gauge{margin-top:6px}
+.vactions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.remark{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px}
+.remark .row{display:flex;gap:8px}
+.remark input{font:600 18px/1 var(--display);letter-spacing:.5px}
+.remark .btn{min-width:110px}
+@media (prefers-reduced-motion:no-preference){.verdict.flash{animation:fl .35s ease-out}@keyframes fl{from{transform:scale(.985);opacity:.4}to{transform:none;opacity:1}}}
+
+/* today list */
+.today{list-style:none;margin:0;padding:0;max-height:300px;overflow:auto}
+.today li{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:15px}
+.today li:last-child{border-bottom:0}
+.today .tm{color:var(--ink2);font-size:13px;font-variant-numeric:tabular-nums}
+.today .md{font:700 18px/1.1 var(--display)}
+.today .sz{font-size:13px;color:var(--ink2)}
+.tag{display:inline-block;padding:3px 8px;border-radius:5px;font-size:13px;font-weight:700;white-space:nowrap}
+.tag.pass{background:var(--pass-bg);color:var(--pass)} .tag.fail{background:var(--fail-bg);color:var(--fail)} .tag.warn{background:var(--warn-bg);color:var(--warn)}
+.up{font-size:11px;color:var(--ink2)}
+.muted{color:var(--ink2);font-size:14px} .note{font-size:14px;color:var(--ink2);margin:8px 0 0}
+.flag{font-size:13px;font-weight:600} .flag.bad{color:var(--fail)}
+.banner{border-left:5px solid var(--warn);background:var(--warn-bg);padding:10px 12px;border-radius:6px;margin:10px 0;font-size:15px}
+.banner.err{border-color:var(--fail);background:var(--fail-bg)}
+dialog{border:2px solid var(--ink);border-radius:12px;background:var(--panel);color:var(--ink);max-width:560px;width:calc(100% - 32px);padding:20px}
+dialog.photo{max-width:min(1100px,96vw);padding:10px}
+dialog.photo img{display:block;width:100%;max-height:80vh;object-fit:contain;background:#000;border-radius:8px}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:10px;font-weight:600;z-index:50;max-width:90vw}
+.login{max-width:440px;margin:40px auto 0}
+.login .btn{width:100%;margin-top:16px;min-height:60px;font-size:19px}
+.login input,.login select{font-size:20px}
+.err{color:var(--fail);font-weight:600;min-height:24px;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><img id="brandIcon" src="icon-192.png" alt="" width="46" height="46"><div><b>QC Verifier 2</b><small>Code List 2: barcode, width and length with tape check</small></div></div>
+    <div class="tally hidden" id="tally" title="Today on this tablet"></div>
+    <button class="btn small primary hidden" id="installBtn" type="button">Install app</button>
+    <button class="pill off" id="syncPill" type="button">Google Sheet: not set up</button>
+    <div class="userchip hidden" id="userChip"><span id="userName"></span><button class="btn small" id="logoutBtn" type="button">Log out</button></div>
+  </header>
+  <div class="listinfo" id="listinfo">Loading code list…</div>
+  <div id="iconBanner"></div>
+  <div id="globalBanner"></div>
+
+  <section class="panel login hidden" id="loginView">
+    <h2>QC log in</h2>
+    <label class="f" for="loginId">Name</label>
+    <select id="loginId"><option value="">Loading names…</option></select>
+    <label class="f" for="loginPin">Password</label>
+    <input type="password" id="loginPin" autocomplete="current-password" placeholder="Password">
+    <button class="btn primary" id="loginBtn" type="button">Log in</button>
+    <div class="err" id="loginErr" role="alert"></div>
+    <p class="note">Name not in the list, or forgot your password? Ask the QC owner. Log in needs internet; checks keep saving on the tablet if Wi-Fi drops afterwards.</p>
+  </section>
+
+  <div class="grid hidden" id="appView">
+    <div class="side">
+      <div class="panel">
+        <h2>1. Pick the model</h2>
+        <div class="seg" role="group" aria-label="Inspection type">
+          <button type="button" data-mode="IPQC" aria-pressed="true"><b>IPQC</b><span>Packaging label UPC</span></button>
+          <button type="button" data-mode="IQC" aria-pressed="false"><b>IQC</b><span>Carton bar code</span></button>
+        </div>
+        <div class="chips" id="custChips"></div>
+        <label class="f" for="modelSearch">Model</label>
+        <input type="search" id="modelSearch" placeholder="Type model, size or description" autocomplete="off">
+        <div class="picklist hidden" id="picklist"></div>
+        <div id="pickedBox"></div>
+      </div>
+      <div class="panel">
+        <h2>Today on this tablet</h2>
+        <ul class="today" id="todayList"></ul>
+      </div>
+    </div>
+
+    <div class="panel">
+      <ol class="rail" id="rail" aria-label="Check steps"></ol>
+
+      <button class="btn dark big" id="camBtn" type="button">Open camera</button>
+      <div class="camwrap" id="camwrap">
+        <video id="video" playsinline muted></video>
+        <div class="ov scan" id="ov"><div class="band"></div><div class="frame"></div><div class="hint" id="ovHint"></div><div class="chip" id="ovChip"></div></div>
+        <div class="focusbox" id="focusBox"></div>
+        <button class="shutter hidden" id="shutter" type="button"><span>Take photo</span></button>
+        <div class="camctl">
+          <label class="zoom hidden" id="zoomBox">Zoom <input type="range" id="zoom" min="1" max="1" step="0.1" value="1"></label>
+          <button class="btn small hidden" id="autoBtn" type="button" aria-pressed="true">Auto photo: on</button>
+          <button class="btn small hidden" id="sideBtn" type="button">Button: left</button>
+          <button class="btn small hidden" id="forceBtn" type="button">Take photo anyway</button>
+          <button class="btn small hidden" id="torchBtn" type="button">Light</button>
+          <button class="btn small" id="camStop" type="button">Close camera</button>
+        </div>
+      </div>
+      <div class="alt hidden" id="altBox">
+        <label class="btn small">Use tablet camera app<input type="file" id="fileShot" accept="image/*" capture="environment" hidden></label>
+      </div>
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+
+      <div class="measure hidden" id="measure">
+        <button class="shot" id="shotBtn" type="button"><img id="shotImg" alt="Tape reading photo"><span>Tap to zoom</span></button>
+        <div>
+          <div class="mtitle" id="mTitle">Width</div>
+          <div class="mspec" id="mSpec"></div>
+          <div class="readrow">
+            <div class="in"><input type="text" id="reading" inputmode="decimal" autocomplete="off" placeholder="Reading" aria-describedby="mNote"><span class="u">mm</span></div>
+            <button class="btn primary" id="okReading" type="button">Confirm</button>
+          </div>
+          <div class="mnote" id="mNote">In mm. Tape shows 100.5 cm → type 1005.</div>
+          <div class="gmsg" id="liveMsg"></div>
+          <div class="vactions"><button class="btn small" id="retake" type="button">Retake photo</button></div>
+        </div>
+      </div>
+
+      <div class="verdict idle" id="verdict">
+        <div class="vin">
+          <div class="vword" id="vword">Ready</div>
+          <div class="vwhy" id="vwhy"></div>
+          <ul class="checks" id="checks"></ul>
+          <div class="vactions" id="vactions"></div>
+          <div class="remark hidden" id="remarkBox">
+            <label class="f" for="remarkTxt" style="margin-top:0">Copy into the form's Remarks</label>
+            <div class="row"><input type="text" id="remarkTxt" readonly><button class="btn primary" id="copyRemark" type="button">Copy</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<dialog id="sheetDlg">
+  <h2>Google Sheet link</h2>
+  <p class="muted">Paste the Apps Script Web App URL (ends with /exec). Saved on this tablet.</p>
+  <label class="f" for="sheetUrl">Web App URL</label>
+  <input type="url" id="sheetUrl" placeholder="https://script.google.com/macros/s/…/exec">
+  <p class="status" id="sheetTest"></p>
+  <div class="vactions">
+    <button class="btn primary" id="sheetSave" type="button">Save and test</button>
+    <button class="btn" id="sheetClose" type="button">Close</button>
+  </div>
+</dialog>
+<dialog id="photoDlg" class="photo"><img id="photoBig" alt="Photo"><div class="vactions"><button class="btn" id="photoClose" type="button">Close</button></div></dialog>
+
+<script>
+/* ============ SETTINGS: paste your NEW Apps Script Web App URL between the quotes ============ */
+const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx4jz-03IVSxS_Bh2ttXY6xGa-dZQk601rCkIwTjpTxiJkyKeU1cMRSl7mIXXbvXpCFPQ/exec';   // paste the NEW Code List 2 Web App URL here (not the Code List 1 one)
+/* Minor band: reading outside the tolerance by up to this many mm = yellow "minor, still acceptable".
+   Further out = red FAIL. Example: spec 894, tolerance ±1, band 1 → 893–895 pass, 892 / 896 minor, 891 / 897 and beyond fail. */
+const MINOR_BAND_MM = 2;
+/* Photo check: width/length photo can only be taken when a tape measure is seen at the yellow line.
+   TAPE_CHECK = false switches it off. After FORCE_AFTER_S seconds a "Take photo anyway" button appears; that photo is flagged in the Remark. */
+const TAPE_CHECK = true;
+const FORCE_AFTER_S = 15;
+/* ============================================================================================ */
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const digits = s => String(s ?? '').replace(/\D/g, '');
+function gs1ok(c){
+  if (!/^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(c)) return false;
+  let s = 0; const b = c.slice(0, -1);
+  for (let i = 0; i < b.length; i++) s += (+b[b.length - 1 - i]) * (i % 2 === 0 ? 3 : 1);
+  return (10 - s % 10) % 10 === +c.slice(-1);
+}
+const key14 = c => c.padStart(14, '0');
+function fmtCode(c){
+  if (!c) return '';
+  if (c.length === 12) return `${c[0]} ${c.slice(1,6)} ${c.slice(6,11)} ${c[11]}`;
+  if (c.length === 13) return `${c[0]} ${c.slice(1,7)} ${c.slice(7)}`;
+  if (c.length === 14) return `${c[0]} ${c.slice(1,3)} ${c.slice(3,8)} ${c.slice(8,13)} ${c[13]}`;
+  return c;
+}
+const fmm = n => (n == null || n === '') ? '' : (Math.round(n * 10) / 10).toString();
+const LS = {
+  get(k, d){ try { const v = localStorage.getItem('qcl2:' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v){ try { localStorage.setItem('qcl2:' + k, JSON.stringify(v)); } catch {} }
+};
+const pad = n => String(n).padStart(2, '0');
+const dStr = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const tStr = d => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+
+const S = { autoShot: LS.get('autoShot', true), side: LS.get('shutterSide', 'left'), items: [], mode: 'IPQC', customer: '', expected: null, insp: null, pending: 0,
+  sheetUrl: DEFAULT_SHEET_URL || LS.get('sheetUrl', ''), device: LS.get('device', null) };
+if (!S.device){ S.device = 'T' + Math.random().toString(36).slice(2, 7).toUpperCase(); LS.set('device', S.device); }
+
+/* ---------- offline queue (IndexedDB holds photos; localStorage is too small) ---------- */
+const Q = (() => {
+  let dbp = null, mem = new Map();
+  const open = () => dbp || (dbp = new Promise((res, rej) => {
+    try { const r = indexedDB.open('qcl2', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('queue', { keyPath: 'id' });
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    } catch (e) { rej(e); }
+  }));
+  const tx = async (mode, fn) => {
+    const db = await open();
+    return new Promise((res, rej) => { const t = db.transaction('queue', mode), q = fn(t.objectStore('queue'));
+      t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error); });
+  };
+  return {
+    put: r => tx('readwrite', s => s.put(r)).catch(() => mem.set(r.id, r)),
+    del: id => tx('readwrite', s => s.delete(id)).catch(() => mem.delete(id)),
+    all: () => tx('readonly', s => s.getAll()).catch(() => Array.from(mem.values()))
+  };
+})();
+
+/* ---------- sound ---------- */
+let actx = null;
+function beep(kind){
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    let t = actx.currentTime;
+    const seq = kind === 'ok' ? [[1320, .1]] : kind === 'tick' ? [[880, .05]] : [[330, .22], [260, .3]];
+    for (const [f, d] of seq){
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = kind === 'bad' ? 'square' : 'sine'; o.frequency.value = f; g.gain.value = .15;
+      o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + d); t += d + .05;
+    }
+  } catch {}
+  try { navigator.vibrate && navigator.vibrate(kind === 'bad' ? [200, 80, 200] : 50); } catch {}
+}
+function toast(msg){ const el = document.createElement('div'); el.className = 'toast'; el.textContent = msg; document.body.appendChild(el); setTimeout(() => el.remove(), 2600); }
+const setStatus = t => { $('#status').textContent = t || ''; };
+const banner = (html, err) => { $('#globalBanner').innerHTML = html ? `<div class="banner ${err ? 'err' : ''}">${html}</div>` : ''; };
+
+/* ---------- code list from Google Sheet ---------- */
+const numOrNull = v => { const n = parseFloat(v); return isFinite(n) && n > 0 ? n : null; };
+function normItem(i){
+  return { form: String(i.form || '').trim().toUpperCase() === 'IQC' ? 'IQC' : 'IPQC', customer: String(i.customer ?? '').trim(),
+           model: String(i.model ?? '').trim(), desc: String(i.desc ?? '').trim(), code: digits(i.code), alt: String(i.alt ?? '').trim(),
+           len: numOrNull(i.len), wid: numOrNull(i.wid), lenNom: numOrNull(i.lenNom), widNom: numOrNull(i.widNom),
+           tol: numOrNull(i.tol) || 1 };
+}
+function applyList(items, label){
+  S.items = (items || []).map(normItem).filter(i => i.model);
+  if (S.expected){
+    const fresh = S.items.find(i => i.model === S.expected.model && i.form === S.expected.form) || null;
+    if (!fresh){ S.expected = null; S.insp = null; } else S.expected = fresh;
+  }
+  const sized = S.items.filter(i => i.len || i.wid).length;
+  $('#listinfo').textContent = `${S.items.length} models loaded (${sized} with size check), ${label}`;
+  renderChips(); renderPick(); renderRail();
+}
+async function sheetGetCodes(url){
+  let r;
+  try { r = await fetch(url + (url.includes('?') ? '&' : '?') + 'action=codes', { redirect: 'follow' }); }
+  catch { throw new Error('no connection to Google (check internet, or the URL)'); }
+  let j; try { j = await r.json(); } catch { throw new Error('the URL did not return data — check the deployment access is “Anyone”'); }
+  if (!j || !j.ok || !Array.isArray(j.items)) throw new Error(j && j.error || 'unexpected reply');
+  if (!j.items.length) throw new Error('the code list sheet is empty');
+  return j.items;
+}
+async function loadList(){
+  if (!S.sheetUrl){
+    $('#listinfo').textContent = 'No code list.';
+    banner('This app has no Google Sheet link yet. Tap the “Google Sheet” button at the top and paste the Web App URL.', true); return;
+  }
+  $('#listinfo').textContent = 'Loading code list from Google Sheet…';
+  try {
+    const items = await sheetGetCodes(S.sheetUrl);
+    LS.set('sheetList', { items, at: new Date().toISOString() });
+    applyList(items, 'from Google Sheet at ' + tStr(new Date()).slice(0, 5)); banner('');
+  } catch (e){
+    const c = LS.get('sheetList', null);
+    if (c){ applyList(c.items, 'saved copy from ' + new Date(c.at).toLocaleString()); banner('Could not reach the Google Sheet (' + esc(e.message) + '). Using the last saved code list.'); }
+    else { $('#listinfo').textContent = 'No code list.'; banner('Code list could not load: ' + esc(e.message) + '.', true); }
+  }
+}
+
+/* ---------- upload queue ---------- */
+let flushing = false;
+async function refreshPending(){ S.pending = (await Q.all()).length; renderPill(); }
+async function flushLog(){
+  if (!S.sheetUrl || flushing) return;
+  flushing = true;
+  try {
+    const recs = (await Q.all()).sort((a, b) => a.id.localeCompare(b.id));
+    for (const rec of recs){                                   // one inspection per request: photos make it big
+      let j;
+      try {
+        const r = await fetch(S.sheetUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'log', rows: [rec] }) });
+        j = await r.json();
+      } catch { break; }                                        // offline: try again later
+      if (!j || !j.ok) break;
+      const rej = (j.rejected || []).some(x => x.id === rec.id);
+      if (rej || (j.accepted || []).includes(rec.id)){
+        await Q.del(rec.id);
+        markHist(rec.id, rej ? 'rejected' : 'up');
+        if (rej) banner('A check was refused by the Google Sheet (log in session not valid). Log out and log in again.', true);
+      }
+    }
+  } finally { flushing = false; refreshPending(); }
+}
+function renderPill(){
+  const p = $('#syncPill');
+  if (!S.sheetUrl){ p.className = 'pill off'; p.textContent = 'Google Sheet: not set up'; return; }
+  p.className = 'pill ' + (S.pending ? 'wait' : 'ok');
+  p.textContent = S.pending ? `Google Sheet: ${S.pending} waiting to upload` : 'Google Sheet: connected';
+}
+$('#syncPill').addEventListener('click', async () => {
+  if (DEFAULT_SHEET_URL){ await loadList(); await flushLog(); toast('Code list reloaded.'); return; }
+  $('#sheetUrl').value = S.sheetUrl; $('#sheetTest').textContent = ''; $('#sheetDlg').showModal();
+});
+$('#sheetClose').addEventListener('click', () => $('#sheetDlg').close());
+$('#sheetSave').addEventListener('click', async () => {
+  const u = $('#sheetUrl').value.trim();
+  if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(u)){ $('#sheetTest').textContent = 'The link must start with https://script.google.com/ and end with /exec.'; return; }
+  $('#sheetTest').textContent = 'Testing…';
+  try { const items = await sheetGetCodes(u); S.sheetUrl = u; LS.set('sheetUrl', u); $('#sheetTest').textContent = `Connected. ${items.length} models found.`; await loadList(); loadNames(); flushLog(); }
+  catch (e){ $('#sheetTest').textContent = 'Could not connect: ' + e.message + '.'; }
+});
+
+/* ---------- today history (no photos) ---------- */
+function addHist(h){ const a = LS.get('hist', []); a.unshift(h); LS.set('hist', a.slice(0, 300)); renderToday(); }
+function markHist(id, st){ const a = LS.get('hist', []); const h = a.find(x => x.id === id); if (h){ h.up = st; LS.set('hist', a); renderToday(); } }
+function renderToday(){
+  const today = dStr(new Date()), list = LS.get('hist', []).filter(h => h.date === today);
+  const p = list.filter(h => h.result === 'PASS').length, f = list.filter(h => h.result === 'FAIL').length;
+  const mi = list.filter(h => h.result === 'MINOR').length;
+  $('#tally').innerHTML = `<span>${list.length} checked</span><span class="p">${p} pass</span>${mi ? `<span class="m">${mi} minor</span>` : ''}<span class="f">${f} NG</span>`;
+  $('#tally').classList.toggle('hidden', !S.session);
+  $('#todayList').innerHTML = list.length ? list.slice(0, 40).map(h => `<li><span class="tm">${esc(h.time.slice(0, 5))}</span>
+    <span><span class="md">${esc(h.model)}</span><br><span class="sz">${esc(h.size || 'label only')}</span></span>
+    <span style="text-align:right"><span class="tag ${h.result === 'PASS' ? 'pass' : h.result === 'FAIL' ? 'fail' : 'warn'}">${esc(h.word || h.result)}</span><br>
+    <span class="up">${h.up === 'up' ? 'uploaded' : h.up === 'rejected' ? 'refused' : 'waiting'}</span></span></li>`).join('')
+    : '<li class="muted" style="display:block">No checks yet today. Pick a model to start.</li>';
+}
+
+/* ---------- model picking ---------- */
+const needTags = i => (i.code ? '<i>UPC</i>' : '') + (i.wid ? '<i>W</i>' : '') + (i.len ? '<i>L</i>' : '');
+function renderChips(){
+  const cs = Array.from(new Set(S.items.filter(i => i.form === S.mode).map(i => i.customer).filter(Boolean)));
+  if (S.customer && !cs.includes(S.customer)) S.customer = '';
+  $('#custChips').innerHTML = cs.length > 1 ? [''].concat(cs).map(c => `<button type="button" data-cust="${esc(c)}" aria-pressed="${S.customer === c}">${c ? esc(c) : 'All'}</button>`).join('') : '';
+}
+function specRow(name, v){
+  if (!v) return `<dt>${name}</dt><dd class="na">— not required</dd>`;
+  return `<dt>${name}</dt><dd class="blind">measure <small>spec hidden</small></dd>`;
+}
+function renderPick(){
+  const q = $('#modelSearch').value.trim().toUpperCase(), qd = digits(q), pl = $('#picklist');
+  if (document.activeElement === $('#modelSearch') || q){
+    const list = S.items.filter(i => i.form === S.mode && (!S.customer || i.customer === S.customer) &&
+      (!q || i.model.toUpperCase().includes(q) || i.desc.toUpperCase().includes(q) || i.alt.toUpperCase().includes(q) || (qd.length >= 4 && i.code.includes(qd)))).slice(0, 80);
+    pl.innerHTML = list.length ? list.map(i => `<button type="button" data-model="${esc(i.model)}"><span class="m">${esc(i.model)}</span><span class="d">${esc(i.desc || i.alt || i.customer)}</span><span class="need">${needTags(i)}</span></button>`).join('')
+      : `<div class="muted" style="padding:12px">${S.items.length ? 'No model matches.' : 'Code list not loaded — see the message at the top.'}</div>`;
+    pl.classList.remove('hidden');
+  } else pl.classList.add('hidden');
+  const e = S.expected;
+  $('#pickedBox').innerHTML = e ? `<div class="spec"><div class="hd"><div class="m">${esc(e.model)}</div><div class="d">${esc(e.desc)}${e.alt ? ', ' + esc(e.alt) : ''}${e.customer ? ', ' + esc(e.customer) : ''}</div></div>
+    <dl><dt>Label code</dt><dd>${e.code ? esc(fmtCode(e.code)) : '<span class="flag bad">none in list</span>'}</dd>
+    ${specRow('Width', e.wid)}${specRow('Length', e.len)}</dl>
+    <div class="ft"><button class="btn link" type="button" id="clearPick">Change model</button></div></div>` : '';
+}
+function pickModel(model){
+  const it = S.items.find(i => i.model === model && i.form === S.mode); if (!it) return;
+  S.expected = it; $('#modelSearch').value = ''; $('#modelSearch').blur(); renderPick(); newInspection();
+}
+$$('.seg button').forEach(b => b.addEventListener('click', () => {
+  if (S.mode === b.dataset.mode) return;
+  S.mode = b.dataset.mode; S.customer = ''; S.expected = null; S.insp = null;
+  $$('.seg button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  renderChips(); renderPick(); renderRail(); idleVerdict(); applyCamMode();
+}));
+$('#custChips').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.customer = b.dataset.cust; renderChips(); $('#modelSearch').focus(); renderPick(); });
+$('#modelSearch').addEventListener('input', renderPick);
+$('#modelSearch').addEventListener('focus', renderPick);
+$('#modelSearch').addEventListener('blur', () => setTimeout(renderPick, 180));
+$('#picklist').addEventListener('mousedown', e => e.preventDefault());
+$('#picklist').addEventListener('click', e => { const b = e.target.closest('button[data-model]'); if (b) pickModel(b.dataset.model); });
+$('#pickedBox').addEventListener('click', e => { if (e.target.id === 'clearPick'){ S.expected = null; S.insp = null; renderPick(); renderRail(); idleVerdict(); applyCamMode(); $('#modelSearch').focus(); } });
+
+/* ---------- inspection state ---------- */
+const ORDER = ['label', 'width', 'length'];
+const NAMES = { label: 'Label', width: 'Width', length: 'Length' };
+function newInspection(){
+  const e = S.expected; if (!e){ S.insp = null; renderRail(); return; }
+  S.insp = { saved: false, cur: null, steps: {
+    label: { need: !!e.code, status: e.code ? 'todo' : 'na' },
+    width: { need: !!e.wid, spec: e.wid, status: e.wid ? 'todo' : 'na' },
+    length: { need: !!e.len, spec: e.len, status: e.len ? 'todo' : 'na' } } };
+  if (!e.code && !e.wid && !e.len){ S.insp = null; renderRail(); showVerdict({ status: 'warn', word: 'Nothing to check', why: `${e.model} has no label code and no size in the code list. Tell the list owner.` }); return; }
+  goNext();
+}
+function goNext(){
+  const st = S.insp.steps, k = ORDER.find(x => st[x].need && st[x].status === 'todo');
+  if (k) setStep(k); else finish();
+}
+function setStep(k){
+  S.insp.cur = k; renderRail(); renderMeasure(); applyCamMode();
+  if (k === 'label') idleVerdict();
+  else showVerdict({ status: 'idle', word: `Measure ${NAMES[k].toLowerCase()}`,
+    why: !stream ? 'Open the camera, then photo the tape reading.'
+      : S.autoShot ? 'Put the tape reading on the yellow line and hold still. The photo is taken by itself.'
+      : 'Put the tape reading on the yellow line and press the yellow button.' });
+}
+function railSub(k, s){
+  if (s.status === 'na') return k === 'label' ? 'no code in list' : 'not required';
+  if (k === 'label'){
+    if (s.status === 'done') return s.ok ? 'matches' : 'wrong label';
+    return 'scan the sticker';
+  }
+  if (s.status === 'done') return S.insp.saved ? `${fmm(s.value)} mm ${s.grade === 'ok' ? 'in tol.' : s.grade === 'minor' ? 'minor' : 'wrong size'}` : `${fmm(s.value)} mm entered`;
+  if (s.status === 'skip') return 'not measured';
+  return 'measure';
+}
+function renderRail(){
+  const r = $('#rail');
+  if (!S.insp){
+    r.innerHTML = ORDER.map((k, i) => `<li><button type="button" disabled${k === 'label' && !S.expected ? ' aria-current="step"' : ''}><span class="n">${i + 1}</span><span><span class="t">${NAMES[k]}</span><span class="s">${S.expected ? '' : k === 'label' ? 'pick a model, or scan to look up' : 'pick a model first'}</span></span></button></li>`).join('');
+    return;
+  }
+  const st = S.insp.steps, saved = S.insp.saved;
+  r.innerHTML = ORDER.map((k, i) => { const s = st[k];
+    const hide = k !== 'label' && s.status === 'done' && !saved;          // size result stays hidden until saved
+    const cls = s.status === 'na' || s.status === 'skip' ? 'na' : s.status === 'done' ? (hide ? 'ent' : (k === 'label' ? s.ok : s.grade === 'ok') ? 'done' : s.grade === 'minor' ? 'minor' : 'bad') : '';
+    const canTap = !saved && s.need && s.status !== 'na' && !(k !== 'label' && st.label.status === 'done' && !st.label.ok);
+    return `<li><button type="button" data-step="${k}" class="${cls}" ${S.insp.cur === k && !saved ? 'aria-current="step"' : ''} ${canTap ? '' : 'disabled'}>
+      <span class="n">${s.status === 'done' ? (hide || (k === 'label' ? s.ok : s.grade === 'ok') ? '✓' : s.grade === 'minor' ? '!' : '✗') : s.status === 'na' || s.status === 'skip' ? '–' : i + 1}</span>
+      <span><span class="t">${NAMES[k]}</span><span class="s">${esc(railSub(k, s))}</span></span>
+      ${s.photo ? `<img src="${s.photo}" alt="">` : ''}</button></li>`; }).join('');
+}
+$('#rail').addEventListener('click', e => {
+  const b = e.target.closest('button[data-step]'); if (!b || b.disabled || !S.insp || S.insp.saved) return;
+  const k = b.dataset.step, s = S.insp.steps[k];
+  if (s.status === 'done'){ s.status = 'todo'; if (k === 'label'){ delete s.ok; } else s.draft = fmm(s.value); }
+  setStep(k);
+});
+
+/* ---------- measurement entry ---------- */
+function renderMeasure(){
+  const box = $('#measure'), I = S.insp;
+  const k = I && !I.saved ? I.cur : null, s = k && k !== 'label' ? I.steps[k] : null;
+  if (!s || !s.photo || s.status !== 'todo'){ box.classList.add('hidden'); return; }
+  $('#shotImg').src = s.photo;
+  $('#mTitle').textContent = `${NAMES[k]} reading`;
+  $('#mSpec').textContent = 'Check the photo is sharp, then type exactly what the tape shows.';
+  $('#reading').value = s.draft || '';
+  box.classList.remove('hidden');
+  checkInput();
+  setTimeout(() => { $('#reading').focus(); box.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 60);
+}
+function parseReading(){
+  const t = $('#reading').value.replace(',', '.').trim(); if (!t) return null;
+  const n = parseFloat(t); return isFinite(n) && n > 0 ? n : NaN;
+}
+function checkInput(){                                          // format check only, never shows the spec
+  const I = S.insp; if (!I || !I.cur || I.cur === 'label') return true;
+  const s = I.steps[I.cur], v = parseReading(), m = $('#liveMsg');
+  s.draft = $('#reading').value; m.className = 'gmsg bad';
+  if (v == null){ m.textContent = ''; return false; }
+  if (isNaN(v)){ m.textContent = 'Numbers only, for example 1005 or 928.5'; return false; }
+  if (v < s.spec / 5){ m.textContent = 'This looks like cm. Type mm: 100.5 cm → 1005.'; return false; }
+  m.textContent = ''; return true;
+}
+$('#reading').addEventListener('input', checkInput);
+$('#reading').addEventListener('keydown', e => { if (e.key === 'Enter') confirmReading(); });
+$('#okReading').addEventListener('click', confirmReading);
+function confirmReading(){
+  const I = S.insp; if (!I || !I.cur || I.cur === 'label') return;
+  const s = I.steps[I.cur], v = parseReading(), e = S.expected;
+  if (v == null){ $('#liveMsg').className = 'gmsg bad'; $('#liveMsg').textContent = 'Type the tape reading in mm first.'; $('#reading').focus(); return; }
+  if (!checkInput()){ $('#reading').focus(); return; }
+  s.value = v; s.status = 'done'; delete s.draft;
+  const dev = Math.abs(v - s.spec);
+  s.grade = dev <= e.tol + 1e-9 ? 'ok' : dev <= e.tol + MINOR_BAND_MM + 1e-9 ? 'minor' : 'bad';
+  s.ok = s.grade === 'ok'; s.over = Math.round((dev - e.tol) * 10) / 10;
+  beep('tick');
+  $('#measure').classList.add('hidden');
+  goNext();
+}
+$('#retake').addEventListener('click', () => {
+  const I = S.insp; if (!I || !I.cur) return; const s = I.steps[I.cur]; delete s.photo;
+  $('#measure').classList.add('hidden'); renderRail(); applyCamMode(); if (!stream) startCam();
+});
+$('#shotBtn').addEventListener('click', () => { $('#photoBig').src = $('#shotImg').src; $('#photoDlg').showModal(); });
+$('#photoClose').addEventListener('click', () => $('#photoDlg').close());
+
+/* ---------- decoding ---------- */
+let detector = null, zreader = null;
+async function initDetector(){
+  try { if ('BarcodeDetector' in window){ const sup = await BarcodeDetector.getSupportedFormats();
+    const f = ['upc_a', 'ean_13', 'itf', 'code_128', 'upc_e', 'ean_8'].filter(x => sup.includes(x)); if (f.length) detector = new BarcodeDetector({ formats: f }); } } catch { detector = null; }
+}
+function zx(){
+  if (!window.ZXing) return null;
+  if (!zreader){ const Z = window.ZXing, h = new Map();
+    h.set(Z.DecodeHintType.POSSIBLE_FORMATS, [Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.ITF, Z.BarcodeFormat.CODE_128, Z.BarcodeFormat.UPC_E, Z.BarcodeFormat.EAN_8]);
+    h.set(Z.DecodeHintType.TRY_HARDER, true); zreader = new Z.MultiFormatReader(); zreader.setHints(h); }
+  return zreader;
+}
+function greyFrom(ctx, w, h){ const d = ctx.getImageData(0, 0, w, h).data, g = new Uint8ClampedArray(w * h);
+  for (let i = 0, j = 0; j < g.length; i += 4, j++) g[j] = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8; return g; }
+function zxGrey(g, w, h){
+  const r = zx(); if (!r) return null; const Z = window.ZXing;
+  try { return r.decode(new Z.BinaryBitmap(new Z.HybridBinarizer(new Z.RGBLuminanceSource(g, w, h)))).getText(); }
+  catch { return null; } finally { try { r.reset(); } catch {} }
+}
+
+/* ---------- photos ---------- */
+function toJpeg(src, sw, sh, max = 1600, q = .8){
+  const sc = Math.min(1, max / Math.max(sw, sh)), c = document.createElement('canvas');
+  c.width = Math.round(sw * sc); c.height = Math.round(sh * sc);
+  c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', q);
+}
+const snapVideo = () => { const v = $('#video'); return v.videoWidth ? toJpeg(v, v.videoWidth, v.videoHeight) : ''; };
+
+/* ---------- live camera ---------- */
+let camCaps = {}, armAt = 0, stream = null, camTimer = null, camBusy = false, lastRead = '', sameCount = 0, camPaused = true, track = null, torchOn = false;
+const cv = document.createElement('canvas'), cctx = cv.getContext('2d', { willReadFrequently: true });
+$('#camBtn').addEventListener('click', startCam);
+$('#camStop').addEventListener('click', stopCam);
+async function startCam(){
+  if (stream){ applyCamMode(); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ setStatus('This browser cannot open the camera. Use Chrome.'); return; }
+  try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false }); }
+  catch (err){ stream = null; setStatus(err && err.name === 'NotAllowedError' ? 'Camera permission is blocked. Tap the lock icon in the address bar → Camera → Allow, then reload.' : 'Camera could not start (' + (err && err.name || 'error') + ').'); return; }
+  const v = $('#video'); v.srcObject = stream; await v.play().catch(() => {});
+  $('#camwrap').classList.add('on'); $('#camBtn').classList.add('hidden'); track = stream.getVideoTracks()[0];
+  try { const caps = camCaps = track.getCapabilities ? track.getCapabilities() : {};
+    $('#torchBtn').classList.toggle('hidden', !caps.torch);
+    if (caps.focusMode && caps.focusMode.includes('continuous')) track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+    if (caps.zoom && caps.zoom.max > caps.zoom.min){ const z = $('#zoom'); z.min = caps.zoom.min; z.max = Math.min(caps.zoom.max, 8); z.step = caps.zoom.step || .1; z.value = caps.zoom.min; $('#zoomBox').classList.remove('hidden'); }
+  } catch {}
+  applyCamMode();
+  if (S.insp && S.insp.cur && S.insp.cur !== 'label') setStep(S.insp.cur);
+}
+const zoomKey = () => camMode() === 'photo' ? 'photoZoom' : 'scanZoom';
+$('#zoom').addEventListener('input', e => { if (!track) return; const z = Number(e.target.value); LS.set(zoomKey(), z); track.applyConstraints({ advanced: [{ zoom: z }] }).catch(() => {}); });
+function applyZoom(){                                             // each mode remembers its own zoom on this tablet
+  if (!track || !camCaps.zoom || !(camCaps.zoom.max > camCaps.zoom.min)) return;
+  const z = Math.min(Number($('#zoom').max), Math.max(camCaps.zoom.min, Number(LS.get(zoomKey(), camCaps.zoom.min))));
+  $('#zoom').value = z; track.applyConstraints({ advanced: [{ zoom: z }] }).catch(() => {});
+}
+function focusAt(x, y){                                           // x, y from 0 to 1
+  if (!track || !camCaps.focusMode) return false;
+  const c = { focusMode: camCaps.focusMode.includes('single-shot') ? 'single-shot' : camCaps.focusMode.includes('continuous') ? 'continuous' : camCaps.focusMode[0] };
+  if ('pointsOfInterest' in camCaps || (track.getSettings && 'pointsOfInterest' in track.getSettings())) c.pointsOfInterest = [{ x, y }];
+  track.applyConstraints({ advanced: [c] }).catch(() => {});
+  if (c.focusMode === 'single-shot' && camCaps.focusMode.includes('continuous'))
+    setTimeout(() => { if (track) track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {}); }, 2500);
+  return true;
+}
+$('#video').addEventListener('click', e => {                      // tap the picture to focus there
+  const r = e.currentTarget.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  focusAt(x, y);
+  const fb = $('#focusBox'); fb.style.left = (x * 100) + '%'; fb.style.top = (y * 100) + '%';
+  fb.classList.add('on'); setTimeout(() => fb.classList.remove('on'), 50);
+  auto.steadySince = 0;
+});
+$('#autoBtn').addEventListener('click', () => { S.autoShot = !S.autoShot; LS.set('autoShot', S.autoShot); applyCamMode(); if (S.insp && S.insp.cur && S.insp.cur !== 'label') setStep(S.insp.cur); });
+$('#sideBtn').addEventListener('click', () => { S.side = { left: 'right', right: 'center', center: 'left' }[S.side] || 'left'; LS.set('shutterSide', S.side); applyCamMode(); });
+
+/* auto photo: waits until the picture is steady and sharp, then takes it */
+/* Tape measure detector: looks for a straight strip of evenly spaced tick marks crossing the centre.
+   Works on tick rhythm, not colour, so yellow, white or red tapes all count. g = grey Uint8 array, w x h (about 320 px). */
+function tapeDetect(g, w, h, opt){
+  opt = opt || {};
+  const THR = opt.thr || 0.42, MINRUN = opt.minRun || 3, STEP = opt.step || 3;
+  const cx = w / 2, cy = h / 2, L = Math.floor(Math.min(w, h) * 0.92), R = Math.floor(Math.min(w, h) * 0.38);
+  const p = new Float32Array(L), q = new Float32Array(L), cs = new Float32Array(L + 1);
+  const coh = (A, B) => { let s = 0; for (let i = 0; i < L; i++) s += A.q[i] * B.q[i]; return s / Math.sqrt(A.e * B.e); };  // ticks line up on neighbouring lines
+  let best = { found: false, run: 0, angle: 0, lag: 0, score: 0 };
+  for (let a = 0; a < 180; a += 12){
+    const t = a * Math.PI / 180, dx = Math.cos(t), dy = Math.sin(t), nx = -dy, ny = dx;
+    const flags = [];
+    for (let o = -R; o <= R; o += STEP){
+      const ox = cx + nx * o, oy = cy + ny * o;
+      let ok = true;
+      for (let i = 0; i < L; i++){
+        const x = Math.round(ox + dx * (i - L / 2)), y = Math.round(oy + dy * (i - L / 2));
+        if (x < 0 || y < 0 || x >= w || y >= h){ ok = false; break; }
+        p[i] = g[y * w + x];
+      }
+      if (!ok){ flags.push(null); continue; }
+      cs[0] = 0; for (let i = 0; i < L; i++) cs[i + 1] = cs[i] + p[i];
+      const H = 8; let e = 0;
+      for (let i = 0; i < L; i++){ const a0 = Math.max(0, i - H), b0 = Math.min(L, i + H + 1); q[i] = p[i] - (cs[b0] - cs[a0]) / (b0 - a0); e += q[i] * q[i]; }
+      if (e / L < 40){ flags.push(null); continue; }              // too flat: no ticks here
+      let bk = 0, br = -1; const r = k => { let s = 0; for (let i = 0; i + k < L; i++) s += q[i] * q[i + k]; return s / e * L / (L - k); };
+      const rs = []; for (let k = 2; k <= 30; k++) rs[k] = r(k);
+      for (let k = 3; k <= 28; k++) if (rs[k] > rs[k - 1] && rs[k] >= rs[k + 1] && rs[k] > br){ br = rs[k]; bk = k; }
+      const second = bk && 2 * bk <= 30 ? rs[2 * bk] : (bk ? 0.2 : 0);
+      const good = br >= THR && second > 0.15;
+      flags.push(good ? { lag: bk, r: br, q: Float32Array.from(q), e } : null);
+    }
+    // longest band of neighbouring lines that share the same tick spacing
+    let run = 0, lag = 0, sc = 0;
+    for (let i = 0; i < flags.length; i++){
+      if (!flags[i]) continue;
+      let j = i, s = 0; const k0 = flags[i].lag;
+      while (j < flags.length && flags[j] && Math.abs(flags[j].lag - k0) <= 1 && (j === i || coh(flags[j - 1], flags[j]) >= (opt.coh || 0.5))){ s += flags[j].r; j++; }
+      if (j - i > run){ run = j - i; lag = k0; sc = s / (j - i); }
+    }
+    if (run > best.run || (run === best.run && sc > best.score)) best = { found: run >= MINRUN, run, angle: a, lag, score: +sc.toFixed(2) };
+  }
+  return best;
+}
+
+/* photo guard: is a tape measure (and, with a trained model, the product) in the picture? */
+const guard = { timer: null, hist: [], ai: [], start: 0, ok: !TAPE_CHECK, tape: false, aiOk: true, busy: false };
+const tcv = document.createElement('canvas'), tcx = tcv.getContext('2d', { willReadFrequently: true });
+function greyCentre(src, W, H){                                  // centre 50% of the picture, longest side 320 px
+  const sw = W * .5, sh = H * .5, sc = 320 / Math.max(sw, sh), w = Math.round(sw * sc), h = Math.round(sh * sc);
+  tcv.width = w; tcv.height = h; tcx.drawImage(src, (W - sw) / 2, (H - sh) / 2, sw, sh, 0, 0, w, h);
+  return { g: greyFrom(tcx, w, h), w, h };
+}
+const TAPE_OPT = { step: 2, thr: .42, coh: .5, minRun: 4 };
+function tapeInImage(src, W, H){ const c = greyCentre(src, W, H); return tapeDetect(c.g, c.w, c.h, TAPE_OPT).found; }
+function stopGuard(){ clearInterval(guard.timer); guard.timer = null; $('#forceBtn').classList.add('hidden'); $('#ovChip').textContent = ''; }
+function startGuard(){
+  stopGuard(); Object.assign(guard, { hist: [], ai: [], start: Date.now(), ok: !TAPE_CHECK, tape: false, aiOk: !AI.model });
+  if (!TAPE_CHECK && !AI.model){ showGuard(); return; }
+  guard.timer = setInterval(guardTick, 300); showGuard();
+}
+async function guardTick(){
+  const v = $('#video'); if (guard.busy || !stream || !v.videoWidth || camMode() !== 'photo'){ if (camMode() !== 'photo') stopGuard(); return; }
+  guard.busy = true;
+  try {
+    if (TAPE_CHECK){ guard.hist.push(tapeInImage(v, v.videoWidth, v.videoHeight)); if (guard.hist.length > 4) guard.hist.shift(); }
+    guard.tape = !TAPE_CHECK || guard.hist.filter(Boolean).length >= 2;      // seen in 2 of the last 4 checks
+    if (AI.model){
+      try { const pr = await AI.model.predict(v); const hit = pr.find(x => AI.okRe.test(x.className)) || pr[0];
+        guard.ai.push(hit.probability >= AI.min); if (guard.ai.length > 3) guard.ai.shift(); } catch {}
+      guard.aiOk = guard.ai.filter(Boolean).length >= 2;
+    } else guard.aiOk = true;
+    guard.ok = guard.tape && guard.aiOk;
+    showGuard();
+  } finally { guard.busy = false; }
+}
+function showGuard(){
+  const sh = $('#shutter'); sh.classList.toggle('locked', !guard.ok);
+  $('#ov').classList.toggle('seen', guard.ok);
+  $('#ovChip').className = 'chip' + (guard.ok ? ' ok' : '');
+  $('#ovChip').textContent = !TAPE_CHECK && !AI.model ? '' : guard.ok ? (AI.model ? 'Tape + product OK' : 'Tape OK')
+    : !guard.tape ? 'No tape measure seen' : 'Product not recognised';
+  const late = Date.now() - guard.start > FORCE_AFTER_S * 1000;
+  $('#forceBtn').classList.toggle('hidden', guard.ok || !late || camMode() !== 'photo');
+}
+$('#forceBtn').addEventListener('click', () => { stopAuto(); takeShot(guard.tape ? 'product not recognised' : 'no tape detected'); });
+
+/* optional product model: put model.json, metadata.json and weights.bin (Teachable Machine export) next to index.html */
+const AI = { model: null, okRe: /^(ok|good|pass|correct|tape)/i, min: .75 };
+const loadScript = src => new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+async function loadAI(){
+  try {
+    const r = await fetch('model.json', { cache: 'no-cache' }); if (!r.ok) return;
+    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js');
+    await loadScript('https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.5/dist/teachablemachine-image.min.js');
+    AI.model = await window.tmImage.load('model.json', 'metadata.json');
+    toast('Product check model loaded: ' + AI.model.getClassLabels().join(' / '));
+  } catch { AI.model = null; }
+}
+
+const auto = { timer: null, prev: null, steadySince: 0, hist: [], start: 0, lastFocus: 0 };
+const acv = document.createElement('canvas'); acv.width = 240; acv.height = 180;
+const acx = acv.getContext('2d', { willReadFrequently: true });
+function setRing(p){ $('#shutter').style.setProperty('--p', p); }
+function stopAuto(){ clearInterval(auto.timer); auto.timer = null; setRing(0); }
+function startAuto(){
+  stopAuto(); if (!S.autoShot || !stream) return;
+  Object.assign(auto, { prev: null, steadySince: 0, hist: [], start: Date.now(), lastFocus: Date.now() });
+  focusAt(.5, .5);
+  auto.timer = setInterval(autoTick, 150);
+}
+function autoTick(){
+  const v = $('#video'); if (!stream || !v.videoWidth || camMode() !== 'photo'){ stopAuto(); return; }
+  const W = v.videoWidth, H = v.videoHeight, sw = W * .5, sh = H * .5;       // centre of the picture, around the yellow line
+  acx.drawImage(v, (W - sw) / 2, (H - sh) / 2, sw, sh, 0, 0, 240, 180);
+  const g = greyFrom(acx, 240, 180);
+  let s1 = 0, s2 = 0, n = 0;                                               // sharpness = variance of the Laplacian
+  for (let y = 1; y < 179; y++) for (let x = 1, i = y * 240 + 1; x < 239; x++, i++){
+    const l = 4 * g[i] - g[i - 1] - g[i + 1] - g[i - 240] - g[i + 240]; s1 += l; s2 += l * l; n++; }
+  const sharp = s2 / n - (s1 / n) ** 2;
+  let motion = 99;
+  if (auto.prev){ let d = 0; for (let i = 0; i < g.length; i += 3) d += Math.abs(g[i] - auto.prev[i]); motion = d / (g.length / 3); }
+  auto.prev = g;
+  const now = Date.now(), waited = now - auto.start;
+  auto.hist.push({ t: now, s: sharp }); auto.hist = auto.hist.filter(h => now - h.t < 3000);
+  const best = Math.max(...auto.hist.map(h => h.s));
+  const easy = waited > 7000;                                               // after 7 s accept a little more shake
+  if (motion < (easy ? 9 : 5.5)){ if (!auto.steadySince) auto.steadySince = now; } else auto.steadySince = 0;
+  if (sharp < best * .6 && now - auto.lastFocus > 2500){ focusAt(.5, .5); auto.lastFocus = now; }
+  const sharpOk = waited > 1000 && sharp >= 18 && sharp >= best * (easy ? .75 : .85);
+  const need = easy ? 800 : 1100, held = auto.steadySince ? now - auto.steadySince : 0;
+  const p = sharpOk && guard.ok ? Math.min(1, held / need) : 0;
+  setRing(p);
+  $('#ovHint').textContent = !guard.ok ? (guard.tape ? 'Show the product with the tape' : 'Put the tape measure on the yellow line') : !auto.steadySince ? 'Hold still…' : !sharpOk ? 'Focusing…' : 'Keep still…';
+  if (p >= 1){ stopAuto(); takeShot(); }
+}
+function takeShot(flag){ const p = snapVideo(); if (p) gotPhoto(p, flag || ''); }
+function stopCam(){ stopAuto(); stopGuard(); clearInterval(camTimer); camPaused = true; if (stream){ stream.getTracks().forEach(t => t.stop()); stream = null; } $('#camwrap').classList.remove('on'); $('#camBtn').classList.remove('hidden'); $('#zoomBox').classList.add('hidden'); torchOn = false; setStatus(''); applyCamMode(); }
+$('#torchBtn').addEventListener('click', () => { if (!track) return; torchOn = !torchOn; track.applyConstraints({ advanced: [{ torch: torchOn }] }).catch(() => {}); });
+
+function camMode(){
+  const I = S.insp;
+  if (!I) return S.expected ? 'none' : 'scan';                    // no model picked: lookup scanning
+  if (I.saved) return 'none';
+  if (I.cur === 'label') return 'scan';
+  if (I.cur && !I.steps[I.cur].photo) return 'photo';
+  return 'none';
+}
+function applyCamMode(){
+  const m = camMode(), ov = $('#ov');
+  $('#altBox').classList.toggle('hidden', m !== 'photo');
+  $('#camBtn').textContent = m === 'photo' ? `Open camera for ${NAMES[S.insp.cur].toLowerCase()} photo` : 'Open camera';
+  $('#camwrap').classList.toggle('mini', m === 'none');
+  if (!stream) return;
+  ov.className = 'ov ' + (m === 'photo' ? 'photo' : m === 'scan' ? 'scan' : '');
+  $('#shutter').classList.toggle('hidden', m !== 'photo');
+  ['autoBtn', 'sideBtn'].forEach(id => $('#' + id).classList.toggle('hidden', m !== 'photo'));
+  $('#autoBtn').textContent = 'Auto photo: ' + (S.autoShot ? 'on' : 'off'); $('#autoBtn').classList.toggle('on', S.autoShot);
+  $('#sideBtn').textContent = 'Button: ' + S.side;
+  $('#shutter').className = 'shutter ' + S.side + (m === 'photo' ? '' : ' hidden');
+  clearInterval(camTimer); camPaused = true; stopAuto(); stopGuard(); applyZoom();
+  if (m === 'scan'){
+    $('#ovHint').textContent = S.expected ? `Scan the label of ${S.expected.model}` : 'Look up: scan any label';
+    camPaused = false; lastRead = ''; sameCount = 0; armAt = Date.now() + 1500; camTimer = setInterval(camTick, 140);
+    setStatus('Hold the barcode inside the white box, bars across the red line.');
+  } else if (m === 'photo'){
+    const k = S.insp.cur, up = /upright/i.test(S.expected.desc) && k === 'length';
+    $('#ovHint').textContent = `${NAMES[k]}: put the tape reading on the yellow line`;
+    setStatus(`Close-up of the tape at the edge of the part${up ? ', length including the base plate' : ''}. The photo unlocks when the tape is seen (line turns green). ${S.autoShot ? 'Hold still: the ring fills and the photo is taken by itself.' : 'Press the yellow button.'} Tap the picture to focus.`);
+    startGuard(); startAuto();
+  } else { $('#ovHint').textContent = S.insp && S.insp.saved ? 'Saved. Press Next carton.' : ''; setStatus(''); }
+}
+async function camTick(){
+  if (camBusy || camPaused || Date.now() < armAt) return; const v = $('#video'); if (!v.videoWidth) return;
+  camBusy = true;
+  try {
+    let code = null;
+    if (detector){ try { const r = await detector.detect(v); const hit = r.find(x => gs1ok(digits(x.rawValue))); code = hit ? digits(hit.rawValue) : null; } catch {} }
+    else if (zx()){
+      const W = v.videoWidth, H = v.videoHeight, sx = Math.round(W * .08), sy = Math.round(H * .32), sw = Math.round(W * .84), sh = Math.round(H * .36);
+      const sc = Math.min(1, 1280 / sw), w = Math.round(sw * sc), h = Math.round(sh * sc);
+      cv.width = w; cv.height = h; cctx.drawImage(v, sx, sy, sw, sh, 0, 0, w, h);
+      const t = zxGrey(greyFrom(cctx, w, h), w, h); code = t ? digits(t) : null;
+    }
+    if (code && gs1ok(code)){
+      if (code === lastRead) sameCount++; else { lastRead = code; sameCount = 1; }
+      if (sameCount >= 2){ camPaused = true; clearInterval(camTimer); handleCode(code, snapVideo()); }
+    }
+  } finally { camBusy = false; }
+}
+$('#shutter').addEventListener('click', () => {
+  if (!guard.ok){ toast(guard.tape ? 'Product not recognised. Show the product with the tape.' : 'No tape measure seen. Put the tape reading on the yellow line.'); beep('bad'); return; }
+  stopAuto(); takeShot();
+});
+$('#fileShot').addEventListener('change', async e => {
+  const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
+  const use = (src, W, H) => { const ok = !TAPE_CHECK || tapeInImage(src, W, H); gotPhoto(toJpeg(src, W, H), ok ? '' : 'no tape detected (camera app)');
+    if (!ok) toast('No tape measure seen in this photo. It is flagged for the supervisor.'); };
+  try { const bmp = await createImageBitmap(f); use(bmp, bmp.width, bmp.height); }
+  catch { const img = new Image(); img.onload = () => use(img, img.naturalWidth, img.naturalHeight); img.src = URL.createObjectURL(f); }
+});
+function gotPhoto(p, flag){
+  const I = S.insp; if (!I || !I.cur || I.cur === 'label') return;
+  I.steps[I.cur].photo = p; I.steps[I.cur].flag = flag || ''; beep('tick');
+  const fl = document.createElement('div'); fl.style.cssText = 'position:absolute;inset:0;background:#fff;opacity:.7;transition:opacity .3s';
+  $('#camwrap').appendChild(fl); requestAnimationFrame(() => { fl.style.opacity = 0; }); setTimeout(() => fl.remove(), 350);
+  renderRail(); applyCamMode(); renderMeasure();
+}
+
+/* ---------- label check ---------- */
+function handleCode(code, photo){
+  if (!S.session){ showLogin(); return; }
+  const hits = S.items.filter(i => i.code && key14(i.code) === key14(code));
+  const found = hits.map(h => h.model).join(', ');
+  const e = S.expected;
+  if (!e){
+    showVerdict({ status: hits.length ? 'pass' : 'fail', word: hits.length ? found : 'Not listed', why: hits.length ? hits.map(h => h.desc).join(' / ') : 'This code is not in the code list.',
+      checks: [{ cls: 'skip', b: fmtCode(code), span: 'Look up only, not recorded. Pick a model to check.' }],
+      actions: [['Scan another', () => applyCamMode()]] });
+    beep(hits.length ? 'ok' : 'bad'); return;
+  }
+  const s = S.insp.steps.label;
+  s.code = code; s.found = found; s.photo = photo; s.status = 'done';
+  s.ok = hits.some(h => h.model === e.model);
+  s.why = s.ok ? `matches ${e.model}` : hits.length ? `belongs to ${found}, not ${e.model}` : `not in the code list, ${e.model} should be ${fmtCode(e.code)}`;
+  if (!s.ok){
+    ['width', 'length'].forEach(k => { const d = S.insp.steps[k]; if (d.need && d.status !== 'done') d.status = 'skip'; });
+    beep('bad'); finish(); return;
+  }
+  beep('ok'); goNext();
+}
+
+/* ---------- finish + save ---------- */
+function finish(){
+  const I = S.insp, e = S.expected, st = I.steps, now = new Date();
+  I.saved = true; I.cur = null;
+  const L = st.label, W = st.width, Ln = st.length;
+  const dimBad = [W, Ln].filter(d => d.status === 'done' && d.grade === 'bad');
+  const dimMinor = [W, Ln].filter(d => d.status === 'done' && d.grade === 'minor');
+  const nm = d => d === W ? 'width' : 'length', join = a => a.map(nm).join(' and ');
+  let status, word, why;
+  if (L.status === 'done' && !L.ok){ status = 'fail'; word = L.found ? 'Wrong label' : 'Wrong code'; why = `This code ${L.why}.`; }
+  else if (dimBad.length){ status = 'fail'; word = 'Size NG';
+    why = `${L.status === 'done' ? 'Label is correct, but ' : ''}${join(dimBad)} ${dimBad.length > 1 ? 'are' : 'is'} the wrong size (outside the acceptable limit).`; }
+  else if (dimMinor.length){ status = 'minor'; word = 'Minor';
+    why = `${L.status === 'done' ? 'Label is correct. ' : ''}${join(dimMinor).replace(/^./, c => c.toUpperCase())} ${dimMinor.length > 1 ? 'are' : 'is'} slightly out of tolerance, still acceptable. Tell production.`; }
+  else if (L.status === 'na'){ status = 'warn'; word = 'Check';
+    why = `Size is in tolerance, but ${e.model} has no label code in the code list. Tell the list owner.`; }
+  else { status = 'pass'; word = 'Pass'; why = `Label and size are correct for ${e.model}.`; }
+
+  const dimRes = d => !d.need ? '-' : d.status !== 'done' ? 'NOT MEASURED' : d.grade === 'ok' ? 'PASS' : d.grade === 'minor' ? `MINOR +${fmm(d.over)}mm` : 'OUT OF TOL';
+  const tag = d => d.grade === 'ok' ? '' : d.grade === 'minor' ? ` MINOR +${fmm(d.over)}` : ' NG';
+  const sizeTxt = [W.status === 'done' ? `W ${fmm(W.value)}mm${tag(W)}` : '', Ln.status === 'done' ? `L ${fmm(Ln.value)}mm${tag(Ln)}` : ''].filter(Boolean).join(', ');
+  const flags = [[W, 'W'], [Ln, 'L']].filter(([d]) => d.status === 'done' && d.flag).map(([d, n]) => `${n} photo: ${d.flag}`);
+  let remark;
+  if (status === 'fail' && L.status === 'done' && !L.ok) remark = `NG ${L.code} = ${L.found || 'not in list'}, expected ${e.model} ${e.code}`;
+  else remark = `${L.code ? L.code + ' ' : ''}${e.model} ${status === 'fail' ? 'NG' : status === 'minor' ? 'OK (minor)' : 'OK'}${sizeTxt ? ', ' + sizeTxt : ''}`;
+  if (flags.length) remark += ` [CHECK PHOTO: ${flags.join('; ')}]`;
+  const result = status === 'pass' ? 'PASS' : status === 'fail' ? 'FAIL' : status === 'minor' ? 'MINOR' : 'CHECK';
+  const rec = { id: S.device + '-' + now.getTime(), date: dStr(now), time: tStr(now), form: e.form, customer: e.customer, expected: e.model, desc: e.desc,
+    expectedCode: e.code, code: L.code || '', found: L.status === 'done' ? (L.found || '(not in list)') : '', labelResult: L.status === 'na' ? 'NO CODE IN LIST' : L.ok ? 'PASS' : 'FAIL',
+    widSpec: W.need ? W.spec : '', widRead: W.status === 'done' ? W.value : '', widResult: dimRes(W),
+    lenSpec: Ln.need ? Ln.spec : '', lenRead: Ln.status === 'done' ? Ln.value : '', lenResult: dimRes(Ln),
+    tol: (W.need || Ln.need) ? e.tol : '', result, remark,
+    photos: { label: L.photo || '', width: W.photo || '', length: Ln.photo || '' },
+    uid: S.session.uid, tok: S.session.token, device: S.device };
+  Q.put(rec).then(() => { refreshPending(); flushLog(); });
+  addHist({ id: rec.id, date: rec.date, time: rec.time, model: e.model, result, word, size: sizeTxt, up: 'wait' });
+
+  const checks = [];
+  if (L.status === 'done') checks.push({ cls: L.ok ? 'ok' : 'bad', b: `Label ${fmtCode(L.code)}`, span: L.why });
+  else checks.push({ cls: 'skip', b: 'Label', span: 'no code in the code list' });
+  [[W, 'Width'], [Ln, 'Length']].forEach(([d, n]) => {
+    if (!d.need) checks.push({ cls: 'skip', b: n, span: 'not required for this model' });
+    else if (d.status !== 'done') checks.push({ cls: 'skip', b: `${n} not measured`, span: 'stopped because the label is wrong' });
+    else checks.push({ cls: d.grade, b: `${n} ${fmm(d.value)} mm`, span: d.grade === 'ok' ? `In tolerance (±${fmm(e.tol)} mm)` : '',
+      oot: d.grade === 'minor' ? `Out of tolerance by ${fmm(d.over)} mm, still acceptable` : d.grade === 'bad' ? 'Wrong size: outside the acceptable limit' : '', photo: d.photo, note: d.flag ? `Photo flagged: ${d.flag}` : '' });
+  });
+  renderRail(); applyCamMode();
+  showVerdict({ status, word, why, checks, remark, actions: [['Next carton', nextCarton, true]] });
+  if (status === 'pass') beep('ok'); else if (status === 'minor') beep('tick'); else if (status === 'fail' && !(L.status === 'done' && !L.ok)) beep('bad');
+}
+function nextCarton(){ newInspection(); if (!stream) startCam(); }
+
+function showVerdict(o){
+  const v = $('#verdict'); v.className = 'verdict ' + (o.status || 'idle'); void v.offsetWidth; v.classList.add('flash');
+  $('#vword').textContent = o.word; $('#vwhy').textContent = o.why || '';
+  $('#checks').innerHTML = (o.checks || []).map((c, i) => `<li class="${c.cls}"><span class="ic">${c.cls === 'ok' ? '✓' : c.cls === 'bad' ? '✗' : c.cls === 'minor' ? '!' : '–'}</span>
+    <div><b>${esc(c.b)}</b><span>${esc(c.span)}</span>${c.oot ? `<span class="${c.cls === 'bad' || c.cls === 'minor' ? 'oot' : ''}">${esc(c.oot)}</span>` : ''}
+    ${c.note ? `<span class="flag" style="display:block;color:var(--warn)">${esc(c.note)}</span>` : ''}${c.photo ? `<button class="btn link" type="button" data-photo="${i}">See photo</button>` : ''}</div></li>`).join('');
+  $$('#checks [data-photo]').forEach(b => b.addEventListener('click', () => { $('#photoBig').src = o.checks[+b.dataset.photo].photo; $('#photoDlg').showModal(); }));
+  $('#vactions').innerHTML = (o.actions || []).map((a, i) => `<button class="btn ${a[2] ? 'primary' : ''}" type="button" data-act="${i}" style="min-width:180px">${esc(a[0])}</button>`).join('');
+  $$('#vactions [data-act]').forEach(b => b.addEventListener('click', () => o.actions[+b.dataset.act][1]()));
+  $('#remarkBox').classList.toggle('hidden', !o.remark); $('#remarkTxt').value = o.remark || '';
+  if (o.status !== 'idle' && o.actions && o.actions[0]) setTimeout(() => { const b = $('#vactions [data-act="0"]'); if (b) b.focus({ preventScroll: true }); }, 50);
+}
+function idleVerdict(){
+  const e = S.expected;
+  showVerdict({ status: 'idle', word: 'Ready', why: !e ? 'Pick the model first. You can also scan any label to look it up.'
+    : e.code ? `Open the camera and scan the label for ${e.model}.${e.wid && e.len ? ' Width and length come next.' : e.wid ? ' Width comes next.' : e.len ? ' Length comes next.' : ' Label only, no size check.'}` : '' });
+}
+$('#copyRemark').addEventListener('click', async () => {
+  const t = $('#remarkTxt').value; if (!t) return;
+  try { await navigator.clipboard.writeText(t); toast('Copied. Paste into Remarks.'); }
+  catch { const i = $('#remarkTxt'); i.focus(); i.select(); try { document.execCommand('copy'); toast('Copied. Paste into Remarks.'); } catch { toast('Text selected — long-press and copy.'); } }
+});
+
+/* ---------- log in ---------- */
+async function post(body){
+  const r = await fetch(S.sheetUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+  return r.json();
+}
+function showLogin(msg){
+  stopCam(); S.session = null;
+  $('#appView').classList.add('hidden'); $('#userChip').classList.add('hidden'); $('#tally').classList.add('hidden'); $('#loginView').classList.remove('hidden');
+  $('#loginPin').value = ''; $('#loginErr').textContent = msg || '';
+  loadNames();
+}
+async function loadNames(){
+  const sel = $('#loginId'), last = LS.get('lastUid', '');
+  const fill = names => {
+    sel.innerHTML = '<option value="">Choose your name</option>' + names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+    const hit = names.find(n => n.toUpperCase() === last); if (hit) sel.value = hit;
+  };
+  fill(LS.get('names', []));
+  if (!S.sheetUrl) return;
+  try {
+    const r = await fetch(S.sheetUrl + (S.sheetUrl.includes('?') ? '&' : '?') + 'action=users', { redirect: 'follow' });
+    const j = await r.json();
+    if (j && j.ok && Array.isArray(j.names)){ LS.set('names', j.names); fill(j.names); }
+  } catch { if (!LS.get('names', []).length) sel.innerHTML = '<option value="">No connection — cannot load names</option>'; }
+}
+$('#loginId').addEventListener('change', () => $('#loginPin').focus());
+function showApp(){
+  $('#loginView').classList.add('hidden'); $('#appView').classList.remove('hidden');
+  $('#userChip').classList.remove('hidden'); $('#userName').textContent = S.session.name;
+  renderToday(); renderRail();
+  if (S.insp && S.insp.cur) setStep(S.insp.cur); else if (!S.insp || !S.insp.saved) idleVerdict();
+}
+const LOGIN_ERR = { bad_login: 'Wrong password.', locked: 'Too many wrong tries. Wait 15 minutes, or ask the owner.', inactive: 'This user is turned off. Ask the owner.', no_users_tab: 'The Google Sheet has no “QC Users” tab yet. Ask the owner.' };
+async function doLogin(){
+  const uid = $('#loginId').value.trim().toUpperCase(), pin = $('#loginPin').value.trim();
+  if (!uid || !pin){ $('#loginErr').textContent = 'Choose your name and enter your password.'; return; }
+  if (!S.sheetUrl){ $('#loginErr').textContent = 'This app has no Google Sheet link. Ask the owner.'; return; }
+  $('#loginBtn').disabled = true; $('#loginErr').textContent = 'Checking…';
+  try {
+    const j = await post({ action: 'login', uid, pin, device: S.device });
+    if (j && j.ok){ S.session = { token: j.token, uid: j.uid, name: j.name, exp: j.exp }; LS.set('session', S.session); LS.set('lastUid', j.uid); showApp(); toast('Welcome, ' + j.name); }
+    else $('#loginErr').textContent = LOGIN_ERR[j && j.error] || ('Log in failed: ' + (j && j.error || 'unknown'));
+  } catch { $('#loginErr').textContent = 'No connection to Google. Check the internet and try again.'; }
+  finally { $('#loginBtn').disabled = false; $('#loginPin').value = ''; }
+}
+$('#loginBtn').addEventListener('click', doLogin);
+$('#loginPin').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+$('#logoutBtn').addEventListener('click', async () => {
+  const tok = S.session && S.session.token; LS.set('session', null); showLogin('Logged out.');
+  if (tok) post({ action: 'logout', token: tok }).catch(() => {});
+});
+function sessionAlive(s){ return s && s.token && Date.now() < s.exp; }
+setInterval(() => { if (S.session && !sessionAlive(S.session)){ LS.set('session', null); showLogin('Your session ended (12 hours). Please log in again.'); } }, 60000);
+
+/* ---------- install as an app ---------- */
+let installEv = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEv = e; $('#installBtn').classList.remove('hidden'); });
+window.addEventListener('appinstalled', () => { $('#installBtn').classList.add('hidden'); toast('Installed. Open it from the QC Verify 2 icon.'); });
+$('#installBtn').addEventListener('click', async () => { if (!installEv) return; installEv.prompt(); try { await installEv.userChoice; } catch {} installEv = null; $('#installBtn').classList.add('hidden'); });
+function iconMissing(){
+  $('#iconBanner').innerHTML = '<div class="banner err">The app icon file is missing on the website (icon-192.png). Without it Chrome can only make a plain shortcut. Upload all the icon files next to index.html, then reload.</div>';
+}
+const bi = $('#brandIcon'); bi.addEventListener('error', iconMissing); if (bi.complete && !bi.naturalWidth) iconMissing();
+
+/* ---------- start ---------- */
+const cached = LS.get('sheetList', null); if (cached && S.sheetUrl) applyList(cached.items, 'saved copy');
+renderRail(); idleVerdict(); refreshPending(); initDetector();
+if (!window.ZXing && !('BarcodeDetector' in window)) banner('The barcode reader did not load. Check the internet connection and reload.', true);
+const saved = LS.get('session', null);
+if (sessionAlive(saved)){
+  S.session = saved; showApp();
+  if (S.sheetUrl) post({ action: 'check', token: saved.token }).then(j => { if (j && !j.ok && j.error !== 'server'){ LS.set('session', null); showLogin(LOGIN_ERR[j.error] || 'Please log in again.'); } }).catch(() => {});
+} else showLogin();
+loadList().then(flushLog);
+loadAI();
+setInterval(flushLog, 60000); window.addEventListener('online', flushLog);
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
