@@ -355,7 +355,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 
 <script>
 /* ============ SETTINGS: paste your NEW Apps Script Web App URL between the quotes ============ */
-const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx4jz-03IVSxS_Bh2ttXY6xGa-dZQk601rCkIwTjpTxiJkyKeU1cMRSl7mIXXbvXpCFPQ/exec';   // paste the NEW Code List 2 Web App URL here (not the Code List 1 one)
+const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx4jz-03IVSxS_Bh2ttXY6xGa-dZQk601rCkIwTjpTxiJkyKeU1cMRSl7mIXXbvXpCFPQ/exec';   // Code List 2
 /* Minor band: reading outside the tolerance by up to this many mm = yellow "minor, still acceptable".
    Further out = red FAIL. Example: spec 894, tolerance ±1, band 1 → 893–895 pass, 892 / 896 minor, 891 / 897 and beyond fail. */
 const MINOR_BAND_MM = 2;
@@ -396,6 +396,13 @@ const tStr = d => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSecond
 const S = { autoShot: LS.get('autoShot', true), side: LS.get('shutterSide', 'left'), items: [], mode: 'IPQC', customer: '', expected: null, insp: null, pending: 0,
   sheetUrl: DEFAULT_SHEET_URL || LS.get('sheetUrl', ''), device: LS.get('device', null) };
 if (!S.device){ S.device = 'T' + Math.random().toString(36).slice(2, 7).toUpperCase(); LS.set('device', S.device); }
+
+/* ---------- network: every Google call has a time limit, so a weak Wi-Fi never hangs the app ---------- */
+function fetchT(url, opt, ms){
+  const c = new AbortController(), t = setTimeout(() => c.abort(), ms || 25000);
+  return fetch(url, Object.assign({}, opt || {}, { signal: c.signal })).finally(() => clearTimeout(t));
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* ---------- offline queue (IndexedDB holds photos; localStorage is too small) ---------- */
 const Q = (() => {
@@ -457,28 +464,41 @@ function applyList(items, label){
 }
 async function sheetGetCodes(url){
   let r;
-  try { r = await fetch(url + (url.includes('?') ? '&' : '?') + 'action=codes', { redirect: 'follow' }); }
-  catch { throw new Error('no connection to Google (check internet, or the URL)'); }
-  let j; try { j = await r.json(); } catch { throw new Error('the URL did not return data — check the deployment access is “Anyone”'); }
+  try { r = await fetchT(url + (url.includes('?') ? '&' : '?') + 'action=codes', { redirect: 'follow' }, 25000); }
+  catch { throw new Error('weak or no Wi-Fi'); }
+  const txt = await r.text().catch(() => '');
+  let j; try { j = JSON.parse(txt); }
+  catch { throw new Error(/accounts\.google|ServiceLogin|sign in/i.test(txt) ? 'Google asked for a log in: set the deployment access to “Anyone”' : 'weak Wi-Fi, the reply was cut off'); }
   if (!j || !j.ok || !Array.isArray(j.items)) throw new Error(j && j.error || 'unexpected reply');
   if (!j.items.length) throw new Error('the code list sheet is empty');
   return j.items;
 }
-async function loadList(){
+let listRetry = null, listLoading = false;
+async function loadList(quiet){
   if (!S.sheetUrl){
     $('#listinfo').textContent = 'No code list.';
     banner('This app has no Google Sheet link yet. Tap the “Google Sheet” button at the top and paste the Web App URL.', true); return;
   }
-  $('#listinfo').textContent = 'Loading code list from Google Sheet…';
+  if (listLoading) return; listLoading = true;
   try {
-    const items = await sheetGetCodes(S.sheetUrl);
-    LS.set('sheetList', { items, at: new Date().toISOString() });
-    applyList(items, 'from Google Sheet at ' + tStr(new Date()).slice(0, 5)); banner('');
-  } catch (e){
+    let err;
+    for (let a = 1; a <= (quiet ? 1 : 3); a++){
+      if (!quiet) $('#listinfo').textContent = a === 1 ? 'Loading code list from Google Sheet…' : `Weak connection, trying again (${a} of 3)…`;
+      try {
+        const items = await sheetGetCodes(S.sheetUrl);
+        LS.set('sheetList', { items, at: new Date().toISOString() });
+        applyList(items, 'from Google Sheet at ' + tStr(new Date()).slice(0, 5)); banner('');
+        if (listRetry){ clearInterval(listRetry); listRetry = null; toast('Connected again. Code list updated.'); }
+        return;
+      } catch (e){ err = e; if (/Anyone|empty|sheet/i.test(e.message)) break; if (a < 3 && !quiet) await sleep(a * 3000); }
+    }
     const c = LS.get('sheetList', null);
-    if (c){ applyList(c.items, 'saved copy from ' + new Date(c.at).toLocaleString()); banner('Could not reach the Google Sheet (' + esc(e.message) + '). Using the last saved code list.'); }
-    else { $('#listinfo').textContent = 'No code list.'; banner('Code list could not load: ' + esc(e.message) + '.', true); }
-  }
+    if (c){
+      if (!quiet) applyList(c.items, 'saved copy from ' + new Date(c.at).toLocaleString());
+      banner('Google Sheet not reachable (' + esc(err.message) + '). Using the saved code list; checks are saved on the tablet and upload by themselves. Retrying every 30 s.');
+    } else { $('#listinfo').textContent = 'No code list.'; banner('Code list could not load: ' + esc(err.message) + '. Retrying every 30 s.', true); }
+    if (!listRetry) listRetry = setInterval(() => loadList(true), 30000);
+  } finally { listLoading = false; }
 }
 
 /* ---------- upload queue ---------- */
@@ -492,7 +512,7 @@ async function flushLog(){
     for (const rec of recs){                                   // one inspection per request: photos make it big
       let j;
       try {
-        const r = await fetch(S.sheetUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'log', rows: [rec] }) });
+        const r = await fetchT(S.sheetUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'log', rows: [rec] }) }, 120000);
         j = await r.json();
       } catch { break; }                                        // offline: try again later
       if (!j || !j.ok) break;
@@ -836,10 +856,11 @@ async function guardTick(){
     guard.tape = !TAPE_CHECK || guard.hist.filter(Boolean).length >= 2;      // seen in 2 of the last 4 checks
     if (AI.model){
       try { const pr = await AI.model.predict(v); const hit = pr.find(x => AI.okRe.test(x.className)) || pr[0];
-        guard.ai.push(hit.probability >= AI.min); if (guard.ai.length > 3) guard.ai.shift(); } catch {}
-      guard.aiOk = guard.ai.filter(Boolean).length >= 2;
-    } else guard.aiOk = true;
-    guard.ok = guard.tape && guard.aiOk;
+        guard.ai.push(hit.probability); if (guard.ai.length > 3) guard.ai.shift(); } catch {}
+      guard.aiOk = guard.ai.filter(p => p >= AI.min).length >= 2;
+      guard.aiSure = guard.ai.filter(p => p >= AI.sure).length >= 2;
+    } else { guard.aiOk = true; guard.aiSure = false; }
+    guard.ok = AI.model ? guard.aiOk && (guard.tape || guard.aiSure || !TAPE_CHECK) : guard.tape;
     showGuard();
   } finally { guard.busy = false; }
 }
@@ -848,14 +869,14 @@ function showGuard(){
   $('#ov').classList.toggle('seen', guard.ok);
   $('#ovChip').className = 'chip' + (guard.ok ? ' ok' : '');
   $('#ovChip').textContent = !TAPE_CHECK && !AI.model ? '' : guard.ok ? (AI.model ? 'Tape + product OK' : 'Tape OK')
-    : !guard.tape ? 'No tape measure seen' : 'Product not recognised';
+    : AI.model ? (!guard.aiOk ? 'Show the tape on the product' : 'Move closer to the tape') : 'No tape measure seen';
   const late = Date.now() - guard.start > FORCE_AFTER_S * 1000;
   $('#forceBtn').classList.toggle('hidden', guard.ok || !late || camMode() !== 'photo');
 }
-$('#forceBtn').addEventListener('click', () => { stopAuto(); takeShot(guard.tape ? 'product not recognised' : 'no tape detected'); });
+$('#forceBtn').addEventListener('click', () => { stopAuto(); takeShot(AI.model && !guard.aiOk ? 'tape on product not recognised' : 'no tape detected'); });
 
 /* optional product model: put model.json, metadata.json and weights.bin (Teachable Machine export) next to index.html */
-const AI = { model: null, okRe: /^(ok|good|pass|correct|tape)/i, min: .75 };
+const AI = { model: null, okRe: /^(ok|good|pass|correct|tape)/i, min: .75, sure: .95 };
 const loadScript = src => new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
 async function loadAI(){
   try {
@@ -895,12 +916,13 @@ function autoTick(){
   const best = Math.max(...auto.hist.map(h => h.s));
   const easy = waited > 7000;                                               // after 7 s accept a little more shake
   if (motion < (easy ? 9 : 5.5)){ if (!auto.steadySince) auto.steadySince = now; } else auto.steadySince = 0;
+  if (!guard.ok) auto.steadySince = 0;                                       // hold still only counts once tape + product are recognised
   if (sharp < best * .6 && now - auto.lastFocus > 2500){ focusAt(.5, .5); auto.lastFocus = now; }
   const sharpOk = waited > 1000 && sharp >= 18 && sharp >= best * (easy ? .75 : .85);
   const need = easy ? 800 : 1100, held = auto.steadySince ? now - auto.steadySince : 0;
   const p = sharpOk && guard.ok ? Math.min(1, held / need) : 0;
   setRing(p);
-  $('#ovHint').textContent = !guard.ok ? (guard.tape ? 'Show the product with the tape' : 'Put the tape measure on the yellow line') : !auto.steadySince ? 'Hold still…' : !sharpOk ? 'Focusing…' : 'Keep still…';
+  $('#ovHint').textContent = !guard.ok ? (AI.model && !guard.aiOk ? 'Show the tape on the product' : 'Put the tape measure on the yellow line') : !auto.steadySince ? 'Hold still…' : !sharpOk ? 'Focusing…' : 'Keep still…';
   if (p >= 1){ stopAuto(); takeShot(); }
 }
 function takeShot(flag){ const p = snapVideo(); if (p) gotPhoto(p, flag || ''); }
@@ -958,7 +980,7 @@ async function camTick(){
   } finally { camBusy = false; }
 }
 $('#shutter').addEventListener('click', () => {
-  if (!guard.ok){ toast(guard.tape ? 'Product not recognised. Show the product with the tape.' : 'No tape measure seen. Put the tape reading on the yellow line.'); beep('bad'); return; }
+  if (!guard.ok){ toast(AI.model && !guard.aiOk ? 'Tape on product not recognised. Show the tape reading on the product.' : 'No tape measure seen. Put the tape reading on the yellow line.'); beep('bad'); return; }
   stopAuto(); takeShot();
 });
 $('#fileShot').addEventListener('change', async e => {
@@ -1076,7 +1098,7 @@ $('#copyRemark').addEventListener('click', async () => {
 
 /* ---------- log in ---------- */
 async function post(body){
-  const r = await fetch(S.sheetUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+  const r = await fetchT(S.sheetUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) }, 25000);
   return r.json();
 }
 function showLogin(msg){
@@ -1094,7 +1116,7 @@ async function loadNames(){
   fill(LS.get('names', []));
   if (!S.sheetUrl) return;
   try {
-    const r = await fetch(S.sheetUrl + (S.sheetUrl.includes('?') ? '&' : '?') + 'action=users', { redirect: 'follow' });
+    const r = await fetchT(S.sheetUrl + (S.sheetUrl.includes('?') ? '&' : '?') + 'action=users', { redirect: 'follow' }, 20000);
     const j = await r.json();
     if (j && j.ok && Array.isArray(j.names)){ LS.set('names', j.names); fill(j.names); }
   } catch { if (!LS.get('names', []).length) sel.innerHTML = '<option value="">No connection — cannot load names</option>'; }
@@ -1116,7 +1138,7 @@ async function doLogin(){
     const j = await post({ action: 'login', uid, pin, device: S.device });
     if (j && j.ok){ S.session = { token: j.token, uid: j.uid, name: j.name, exp: j.exp }; LS.set('session', S.session); LS.set('lastUid', j.uid); showApp(); toast('Welcome, ' + j.name); }
     else $('#loginErr').textContent = LOGIN_ERR[j && j.error] || ('Log in failed: ' + (j && j.error || 'unknown'));
-  } catch { $('#loginErr').textContent = 'No connection to Google. Check the internet and try again.'; }
+  } catch { $('#loginErr').textContent = 'Weak or no Wi-Fi: Google did not answer. Move closer to the Wi-Fi and press Log in again.'; }
   finally { $('#loginBtn').disabled = false; $('#loginPin').value = ''; }
 }
 $('#loginBtn').addEventListener('click', doLogin);
@@ -1147,8 +1169,7 @@ if (sessionAlive(saved)){
   S.session = saved; showApp();
   if (S.sheetUrl) post({ action: 'check', token: saved.token }).then(j => { if (j && !j.ok && j.error !== 'server'){ LS.set('session', null); showLogin(LOGIN_ERR[j.error] || 'Please log in again.'); } }).catch(() => {});
 } else showLogin();
-loadList().then(flushLog);
-loadAI();
+loadList().then(flushLog).finally(() => setTimeout(loadAI, 3000));   // product model loads after the Google Sheet, never at the same time
 setInterval(flushLog, 60000); window.addEventListener('online', flushLog);
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
