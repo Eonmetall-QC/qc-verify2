@@ -245,7 +245,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 <body>
 <div class="wrap">
   <header class="top">
-    <div class="brand"><img id="brandIcon" src="icon-192.png" alt="" width="46" height="46"><div><b>QC Verifier 2</b><small>Code List 2: barcode, width and length with tape check</small></div></div>
+    <div class="brand"><img id="brandIcon" src="icon-192.png" alt="" width="46" height="46"><div><b>QC Verifier 2</b><small>Code List 2: barcode, width and length with tape check <span id="verTag"></span></small></div></div>
     <div class="tally hidden" id="tally" title="Today on this tablet"></div>
     <button class="btn small primary hidden" id="installBtn" type="button">Install app</button>
     <button class="pill off" id="syncPill" type="button">Google Sheet: not set up</button>
@@ -355,6 +355,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 
 <script>
 /* ============ SETTINGS: paste your NEW Apps Script Web App URL between the quotes ============ */
+const APP_VERSION = 'R4';
 const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx4jz-03IVSxS_Bh2ttXY6xGa-dZQk601rCkIwTjpTxiJkyKeU1cMRSl7mIXXbvXpCFPQ/exec';   // Code List 2
 /* Minor band: reading outside the tolerance by up to this many mm = yellow "minor, still acceptable".
    Further out = red FAIL. Example: spec 894, tolerance ±1, band 1 → 893–895 pass, 892 / 896 minor, 891 / 897 and beyond fail. */
@@ -459,7 +460,7 @@ function applyList(items, label){
     if (!fresh){ S.expected = null; S.insp = null; } else S.expected = fresh;
   }
   const sized = S.items.filter(i => i.len || i.wid).length;
-  $('#listinfo').textContent = `${S.items.length} models loaded (${sized} with size check), ${label}`;
+  $('#listinfo').textContent = `${S.items.length} models loaded (${sized} with size check), ${label}. Version ${APP_VERSION}, AI ${AI.model ? 'on' : 'off'}`;
   renderChips(); renderPick(); renderRail();
 }
 async function sheetGetCodes(url){
@@ -860,7 +861,7 @@ async function guardTick(){
       guard.aiOk = guard.ai.filter(p => p >= AI.min).length >= 2;
       guard.aiSure = guard.ai.filter(p => p >= AI.sure).length >= 2;
     } else { guard.aiOk = true; guard.aiSure = false; }
-    guard.ok = AI.model ? guard.aiOk && (guard.tape || guard.aiSure || !TAPE_CHECK) : guard.tape;
+    guard.ok = guard.tape && (!AI.model || guard.aiOk);    // strict: the tape pattern AND the AI must both agree (AI alone can be fooled by walls)
     showGuard();
   } finally { guard.busy = false; }
 }
@@ -868,8 +869,9 @@ function showGuard(){
   const sh = $('#shutter'); sh.classList.toggle('locked', !guard.ok);
   $('#ov').classList.toggle('seen', guard.ok);
   $('#ovChip').className = 'chip' + (guard.ok ? ' ok' : '');
-  $('#ovChip').textContent = !TAPE_CHECK && !AI.model ? '' : guard.ok ? (AI.model ? 'Tape + product OK' : 'Tape OK')
-    : AI.model ? (!guard.aiOk ? 'Show the tape on the product' : 'Move closer to the tape') : 'No tape measure seen';
+  const pct = guard.ai.length ? Math.round(Math.max(...guard.ai) * 100) : null, aiTxt = pct == null ? '' : ` (AI ${pct}%)`;
+  $('#ovChip').textContent = !TAPE_CHECK && !AI.model ? '' : guard.ok ? (AI.model ? 'Tape + product OK' + aiTxt : 'Tape OK, AI off')
+    : !guard.tape ? 'Locked: no tape measure seen' + (AI.model ? aiTxt : ', AI off') : 'Locked: show the tape on the product' + aiTxt;
   const late = Date.now() - guard.start > FORCE_AFTER_S * 1000;
   $('#forceBtn').classList.toggle('hidden', guard.ok || !late || camMode() !== 'photo');
 }
@@ -885,6 +887,7 @@ async function loadAI(){
     await loadScript('https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.5/dist/teachablemachine-image.min.js');
     AI.model = await window.tmImage.load('model.json', 'metadata.json');
     toast('Product check model loaded: ' + AI.model.getClassLabels().join(' / '));
+    $('#listinfo').textContent = $('#listinfo').textContent.replace('AI off', 'AI on');
   } catch { AI.model = null; }
 }
 
@@ -922,7 +925,7 @@ function autoTick(){
   const need = easy ? 800 : 1100, held = auto.steadySince ? now - auto.steadySince : 0;
   const p = sharpOk && guard.ok ? Math.min(1, held / need) : 0;
   setRing(p);
-  $('#ovHint').textContent = !guard.ok ? (AI.model && !guard.aiOk ? 'Show the tape on the product' : 'Put the tape measure on the yellow line') : !auto.steadySince ? 'Hold still…' : !sharpOk ? 'Focusing…' : 'Keep still…';
+  $('#ovHint').textContent = !guard.ok ? (guard.tape ? 'Show the tape on the product' : 'Put the tape measure on the yellow line') : !auto.steadySince ? 'Hold still…' : !sharpOk ? 'Focusing…' : 'Keep still…';
   if (p >= 1){ stopAuto(); takeShot(); }
 }
 function takeShot(flag){ const p = snapVideo(); if (p) gotPhoto(p, flag || ''); }
@@ -1161,6 +1164,7 @@ function iconMissing(){
 const bi = $('#brandIcon'); bi.addEventListener('error', iconMissing); if (bi.complete && !bi.naturalWidth) iconMissing();
 
 /* ---------- start ---------- */
+$('#verTag').textContent = '(version ' + APP_VERSION + ')';
 const cached = LS.get('sheetList', null); if (cached && S.sheetUrl) applyList(cached.items, 'saved copy');
 renderRail(); idleVerdict(); refreshPending(); initDetector();
 if (!window.ZXing && !('BarcodeDetector' in window)) banner('The barcode reader did not load. Check the internet connection and reload.', true);
