@@ -355,7 +355,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 
 <script>
 /* ============ SETTINGS: paste your NEW Apps Script Web App URL between the quotes ============ */
-const APP_VERSION = 'R4';
+const APP_VERSION = 'R5';
 const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx4jz-03IVSxS_Bh2ttXY6xGa-dZQk601rCkIwTjpTxiJkyKeU1cMRSl7mIXXbvXpCFPQ/exec';   // Code List 2
 /* Minor band: reading outside the tolerance by up to this many mm = yellow "minor, still acceptable".
    Further out = red FAIL. Example: spec 894, tolerance ±1, band 1 → 893–895 pass, 892 / 896 minor, 891 / 897 and beyond fail. */
@@ -460,7 +460,7 @@ function applyList(items, label){
     if (!fresh){ S.expected = null; S.insp = null; } else S.expected = fresh;
   }
   const sized = S.items.filter(i => i.len || i.wid).length;
-  $('#listinfo').textContent = `${S.items.length} models loaded (${sized} with size check), ${label}. Version ${APP_VERSION}, AI ${AI.model ? 'on' : 'off'}`;
+  $('#listinfo').textContent = `${S.items.length} models loaded (${sized} with size check), ${label}. Version ${APP_VERSION}, ${aiText()}`;
   renderChips(); renderPick(); renderRail();
 }
 async function sheetGetCodes(url){
@@ -845,6 +845,7 @@ const TAPE_OPT = { step: 2, thr: .42, coh: .5, minRun: 4 };
 function tapeInImage(src, W, H){ const c = greyCentre(src, W, H); return tapeDetect(c.g, c.w, c.h, TAPE_OPT).found; }
 function stopGuard(){ clearInterval(guard.timer); guard.timer = null; $('#forceBtn').classList.add('hidden'); $('#ovChip').textContent = ''; }
 function startGuard(){
+  if (!AI.model && !AI.loading && AI.why && !/no model files/.test(AI.why)){ clearTimeout(AI.timer); AI.timer = null; loadAI(); }
   stopGuard(); Object.assign(guard, { hist: [], ai: [], start: Date.now(), ok: !TAPE_CHECK, tape: false, aiOk: !AI.model });
   if (!TAPE_CHECK && !AI.model){ showGuard(); return; }
   guard.timer = setInterval(guardTick, 300); showGuard();
@@ -878,17 +879,29 @@ function showGuard(){
 $('#forceBtn').addEventListener('click', () => { stopAuto(); takeShot(AI.model && !guard.aiOk ? 'tape on product not recognised' : 'no tape detected'); });
 
 /* optional product model: put model.json, metadata.json and weights.bin (Teachable Machine export) next to index.html */
-const AI = { model: null, okRe: /^(ok|good|pass|correct|tape)/i, min: .75, sure: .95 };
-const loadScript = src => new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+const AI = { model: null, okRe: /^(ok|good|pass|correct|tape)/i, min: .75, sure: .95, why: '', loading: false, timer: null, tries: 0 };
+const loadScript = src => new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => { s.remove(); rej(new Error('download')); }; document.head.appendChild(s); });
+const aiText = () => AI.model ? 'AI on' : AI.loading ? 'AI loading…' : 'AI off' + (AI.why ? ` (${AI.why})` : '');
+function showAiInfo(){ const el = $('#listinfo'); el.textContent = el.textContent.replace(/AI (on|off|loading…).*$/, aiText()); }
+function aiOff(why, retry){
+  AI.why = why; showAiInfo();
+  if (retry && !AI.timer) AI.timer = setTimeout(() => { AI.timer = null; loadAI(); }, AI.tries < 3 ? 20000 : 60000);   // keep trying in the background
+}
 async function loadAI(){
+  if (AI.model || AI.loading) return;
+  AI.loading = true; AI.tries++; showAiInfo();
   try {
-    const r = await fetch('model.json', { cache: 'no-cache' }); if (!r.ok) return;
-    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js');
-    await loadScript('https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.5/dist/teachablemachine-image.min.js');
-    AI.model = await window.tmImage.load('model.json', 'metadata.json');
-    toast('Product check model loaded: ' + AI.model.getClassLabels().join(' / '));
-    $('#listinfo').textContent = $('#listinfo').textContent.replace('AI off', 'AI on');
-  } catch { AI.model = null; }
+    let r;
+    try { r = await fetchT('model.json', { cache: 'no-cache' }, 20000); } catch { return aiOff('weak Wi-Fi, retrying', true); }
+    if (!r.ok) return aiOff('no model files on the website', false);
+    try {
+      if (!window.tf) await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js');
+      if (!window.tmImage) await loadScript('https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.5/dist/teachablemachine-image.min.js');
+    } catch { return aiOff('AI engine did not download, weak Wi-Fi, retrying', true); }
+    try { AI.model = await window.tmImage.load('model.json', 'metadata.json'); }
+    catch { return aiOff('model files damaged or not matching: upload all 3 files again', true); }
+    AI.why = ''; toast('Product check model loaded: ' + AI.model.getClassLabels().join(' / '));
+  } finally { AI.loading = false; showAiInfo(); }
 }
 
 const auto = { timer: null, prev: null, steadySince: 0, hist: [], start: 0, lastFocus: 0 };
