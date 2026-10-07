@@ -1,5 +1,5 @@
 /* QC Verifier 2 (Code List 2) – offline app shell. Bump VERSION when you upload a new index.html. */
-const VERSION = 'qcl2-r5';
+const VERSION = 'qcl2-r6';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'maskable-192.png', 'maskable-512.png', 'favicon-32.png', 'apple-touch-icon.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));

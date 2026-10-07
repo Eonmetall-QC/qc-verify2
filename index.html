@@ -167,12 +167,31 @@ input:focus,select:focus{border-color:var(--focus);outline:none}
 .status{margin-top:10px;font-size:15px;min-height:22px}
 .alt{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 
-/* measurement entry */
-.measure{margin-top:12px;border:2px solid var(--ink);border-radius:12px;background:var(--card);padding:14px;display:grid;grid-template-columns:minmax(160px,260px) 1fr;gap:16px}
-@media (max-width:700px){.measure{grid-template-columns:1fr}}
-.measure .shot{position:relative;border-radius:8px;overflow:hidden;background:#000;align-self:start;cursor:zoom-in;border:0;padding:0}
-.measure .shot img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover}
-.measure .shot span{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.65);color:#fff;font-size:13px;padding:3px 8px;border-radius:6px}
+/* measurement entry: the photo with the arrow, then the reading */
+.measure{margin-top:12px;border:2px solid var(--ink);border-radius:12px;background:var(--card);padding:14px;display:grid;grid-template-columns:minmax(0,1.55fr) minmax(240px,1fr);gap:16px;align-items:start}
+@media (max-width:860px){.measure{grid-template-columns:minmax(0,1fr)}}
+.mphoto{position:relative;border-radius:8px;overflow:hidden;background:#000;touch-action:none;user-select:none;-webkit-user-select:none;cursor:crosshair}
+.mphoto img{display:block;width:100%;height:auto;pointer-events:none}
+.mphoto:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.arrow{position:absolute;left:50%;top:50%;width:72px;height:72px;margin:-4.8px 0 0 -4.8px;transform-origin:4.8px 4.8px;pointer-events:none;overflow:visible;filter:drop-shadow(0 1px 2px rgba(0,0,0,.45))}
+.arrow path{fill:#000;stroke:#fff;stroke-width:2.6;paint-order:stroke;stroke-linejoin:round}
+.arrow circle{fill:none;stroke:#ff3b30;stroke-width:1.6}
+@media (prefers-reduced-motion:no-preference){.mphoto.idle .arrow svg,.mphoto.idle .arrow path{animation:none}.mphoto.idle .arrow{animation:nudge 1.1s ease-in-out infinite}@keyframes nudge{50%{opacity:.55}}}
+.loupe{position:absolute;bottom:8px;width:150px;height:150px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 12px rgba(0,0,0,.55);overflow:hidden;pointer-events:none;background:#000}
+.loupe canvas{width:100%;height:100%;display:block}
+.loupe.l{left:8px} .loupe.r{right:8px}
+.mtag{position:absolute;left:8px;top:8px;background:rgba(0,0,0,.72);color:#fff;font-weight:600;font-size:14px;padding:5px 11px;border-radius:999px;pointer-events:none;max-width:calc(100% - 16px)}
+.mphoto.idle .mtag{background:var(--tape);color:var(--tape-ink)}
+.msteps{margin:8px 0 0;padding-left:22px;font-size:15px;color:var(--ink2)}
+.msteps li{margin:3px 0} .msteps li.now{color:var(--ink);font-weight:600} .msteps li.done{color:var(--pass)}
+.aibox{margin-top:12px;border-radius:10px;padding:12px 14px;background:var(--panel);border:1.5px solid var(--line);font-size:15px}
+.aibox.ok{background:var(--pass-bg);border-color:var(--pass)} .aibox.bad{background:var(--fail-bg);border-color:var(--fail)} .aibox.warn{background:var(--warn-bg);border-color:var(--warn)}
+.aibox b{display:block;font:700 20px/1.15 var(--display);margin-bottom:4px}
+.aibox.bad b{color:var(--fail)} .aibox.warn b{color:var(--warn)} .aibox.ok b{color:var(--pass)}
+.aibox p{margin:4px 0} .aibox .vactions{margin-top:10px}
+.aibox strong{font:700 22px/1 var(--display)}
+.spin{display:inline-block;width:16px;height:16px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;vertical-align:-3px;margin-right:8px}
+@media (prefers-reduced-motion:no-preference){.spin{animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}}
 .mtitle{font:700 24px/1.1 var(--display)}
 .mspec{color:var(--ink2);font-size:15px;margin-top:2px}
 .readrow{display:flex;gap:8px;align-items:stretch;margin-top:12px}
@@ -310,17 +329,25 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
       <div class="status" id="status" role="status" aria-live="polite"></div>
 
       <div class="measure hidden" id="measure">
-        <button class="shot" id="shotBtn" type="button"><img id="shotImg" alt="Tape reading photo"><span>Tap to zoom</span></button>
+        <div>
+          <div class="mphoto idle" id="mPhoto" tabindex="0" aria-label="Tape photo. Drag, tap or use the arrow keys to move the arrow to the product edge.">
+            <img id="shotImg" alt="Tape reading photo">
+            <svg class="arrow" id="arrow" viewBox="0 0 60 60" aria-hidden="true"><path d="M4 4 L32.3 15.3 L26.6 21 L56.3 50.7 L50.7 56.3 L21 26.6 L15.3 32.3 Z"/><circle cx="4" cy="4" r="3.2"/></svg>
+            <div class="loupe hidden" id="loupe"><canvas id="loupeCv" width="300" height="300"></canvas></div>
+            <span class="mtag" id="mTag">Drag the arrow to the product edge</span>
+          </div>
+          <div class="vactions"><button class="btn small" id="retake" type="button">Retake photo</button><button class="btn small" id="shotBtn" type="button">Zoom photo</button></div>
+        </div>
         <div>
           <div class="mtitle" id="mTitle">Width</div>
-          <div class="mspec" id="mSpec"></div>
+          <ol class="msteps"><li id="mStep1">Move the arrow tip to the end edge of the product, on the tape.</li><li id="mStep2">Type what the tape shows at the arrow.</li></ol>
           <div class="readrow">
             <div class="in"><input type="text" id="reading" inputmode="decimal" autocomplete="off" placeholder="Reading" aria-describedby="mNote"><span class="u">mm</span></div>
             <button class="btn primary" id="okReading" type="button">Confirm</button>
           </div>
           <div class="mnote" id="mNote">In mm. Tape shows 100.5 cm → type 1005.</div>
           <div class="gmsg" id="liveMsg"></div>
-          <div class="vactions"><button class="btn small" id="retake" type="button">Retake photo</button></div>
+          <div class="aibox hidden" id="aiBox" role="status" aria-live="polite"></div>
         </div>
       </div>
 
@@ -355,7 +382,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 
 <script>
 /* ============ SETTINGS: paste your NEW Apps Script Web App URL between the quotes ============ */
-const APP_VERSION = 'R5';
+const APP_VERSION = 'R6';
 const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx4jz-03IVSxS_Bh2ttXY6xGa-dZQk601rCkIwTjpTxiJkyKeU1cMRSl7mIXXbvXpCFPQ/exec';   // Code List 2
 /* Minor band: reading outside the tolerance by up to this many mm = yellow "minor, still acceptable".
    Further out = red FAIL. Example: spec 894, tolerance ±1, band 1 → 893–895 pass, 892 / 896 minor, 891 / 897 and beyond fail. */
@@ -364,6 +391,10 @@ const MINOR_BAND_MM = 2;
    TAPE_CHECK = false switches it off. After FORCE_AFTER_S seconds a "Take photo anyway" button appears; that photo is flagged in the Remark. */
 const TAPE_CHECK = true;
 const FORCE_AFTER_S = 15;
+/* AI reading check: after each width/length photo the QC moves an arrow to the product edge; the AI reads the tape there
+   and compares it with the typed reading. READ_MATCH_MM = how close the two must be. READ_CHECK = false switches it off. */
+const READ_CHECK = true;
+const READ_MATCH_MM = 2;
 /* ============================================================================================ */
 (() => {
 'use strict';
@@ -460,7 +491,7 @@ function applyList(items, label){
     if (!fresh){ S.expected = null; S.insp = null; } else S.expected = fresh;
   }
   const sized = S.items.filter(i => i.len || i.wid).length;
-  $('#listinfo').textContent = `${S.items.length} models loaded (${sized} with size check), ${label}. Version ${APP_VERSION}, ${aiText()}`;
+  $('#listinfo').textContent = `${S.items.length} models loaded (${sized} with size check), ${label}. Version ${APP_VERSION}, ${aiText()}, ${ocrText()}`;
   renderChips(); renderPick(); renderRail();
 }
 async function sheetGetCodes(url){
@@ -658,57 +689,219 @@ function renderRail(){
 $('#rail').addEventListener('click', e => {
   const b = e.target.closest('button[data-step]'); if (!b || b.disabled || !S.insp || S.insp.saved) return;
   const k = b.dataset.step, s = S.insp.steps[k];
-  if (s.status === 'done'){ s.status = 'todo'; if (k === 'label'){ delete s.ok; } else s.draft = fmm(s.value); }
+  if (s.status === 'done'){ s.status = 'todo'; if (k === 'label'){ delete s.ok; } else { s.draft = fmm(s.value); if (s.photoRaw) s.photo = s.photoRaw; } }
   setStep(k);
 });
 
-/* ---------- measurement entry ---------- */
+/* ---------- measurement entry: arrow on the photo, typed reading, AI reading check ---------- */
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const loadImg = src => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+function curStep(){ const I = S.insp, k = I && !I.saved ? I.cur : null; return k && k !== 'label' ? I.steps[k] : null; }
 function renderMeasure(){
-  const box = $('#measure'), I = S.insp;
-  const k = I && !I.saved ? I.cur : null, s = k && k !== 'label' ? I.steps[k] : null;
+  const box = $('#measure'), s = curStep();
   if (!s || !s.photo || s.status !== 'todo'){ box.classList.add('hidden'); return; }
-  $('#shotImg').src = s.photo;
-  $('#mTitle').textContent = `${NAMES[k]} reading`;
-  $('#mSpec').textContent = 'Check the photo is sharp, then type exactly what the tape shows.';
+  s.photoRaw = s.photoRaw || s.photo;
+  const img = $('#shotImg');
+  if (img.dataset.src !== s.photoRaw){ img.src = s.photoRaw; img.dataset.src = s.photoRaw; }
+  $('#mTitle').textContent = `${NAMES[S.insp.cur]} reading`;
   $('#reading').value = s.draft || '';
-  box.classList.remove('hidden');
-  checkInput();
-  setTimeout(() => { $('#reading').focus(); box.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 60);
+  box.classList.remove('hidden'); showAi('');
+  const ready = () => { if (!s.arrow) s.arrow = { x: img.naturalWidth / 2, y: img.naturalHeight / 2 }; placeArrow(); };
+  if (img.complete && img.naturalWidth) ready(); else img.onload = ready;
+  checkInput(); updateSteps();
+  showVerdict({ status: 'idle', word: `Mark the ${NAMES[S.insp.cur].toLowerCase()}`, why: 'Move the arrow tip to the product edge on the tape, type the reading, then press Confirm.' });
+  setTimeout(() => box.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 60);
 }
+function placeArrow(){
+  const s = curStep(), img = $('#shotImg'); if (!s || !s.arrow || !img.naturalWidth) return;
+  const a = $('#arrow'); a.style.left = (s.arrow.x / img.naturalWidth * 100) + '%'; a.style.top = (s.arrow.y / img.naturalHeight * 100) + '%';
+  a.style.transform = `scale(${s.arrow.x > img.naturalWidth * .7 ? -1 : 1}, ${s.arrow.y > img.naturalHeight * .6 ? -1 : 1})`;
+  $('#mPhoto').classList.toggle('idle', !s.arrowMoved);
+  $('#mTag').textContent = s.arrowMoved ? 'Arrow placed. Drag again to adjust.' : 'Drag the arrow to the product edge';
+}
+function updateSteps(){
+  const s = curStep(); if (!s) return;
+  const typed = parseReading() != null;
+  $('#mStep1').className = s.arrowMoved ? 'done' : 'now';
+  $('#mStep2').className = s.arrowMoved ? (typed ? 'done' : 'now') : '';
+}
+function showLoupe(on){
+  $('#loupe').classList.toggle('hidden', !on); if (on) drawLoupe();
+}
+function drawLoupe(){
+  const s = curStep(), img = $('#shotImg'); if (!s || !s.arrow) return;
+  const cv = $('#loupeCv'), x = cv.getContext('2d'), r = img.getBoundingClientRect(), k = img.naturalWidth / r.width;
+  const span = 150 / 3 * k;                                          // 3x the photo as shown
+  x.fillStyle = '#000'; x.fillRect(0, 0, 300, 300);
+  x.drawImage(img, s.arrow.x - span / 2, s.arrow.y - span / 2, span, span, 0, 0, 300, 300);
+  x.strokeStyle = '#ff3b30'; x.lineWidth = 2; x.beginPath(); x.moveTo(150, 120); x.lineTo(150, 180); x.moveTo(120, 150); x.lineTo(180, 150); x.stroke();
+  x.beginPath(); x.arc(150, 150, 7, 0, 7); x.stroke();
+  $('#loupe').className = 'loupe ' + (s.arrow.x < img.naturalWidth / 2 ? 'r' : 'l');
+}
+const AR = { drag: null };
+const mp = $('#mPhoto');
+mp.addEventListener('pointerdown', e => {
+  const s = curStep(), img = $('#shotImg'); if (!s || !s.arrow || !img.naturalWidth) return;
+  e.preventDefault(); mp.setPointerCapture(e.pointerId);
+  const r = img.getBoundingClientRect();
+  AR.drag = { id: e.pointerId, x0: e.clientX, y0: e.clientY, ax: s.arrow.x, ay: s.arrow.y, k: img.naturalWidth / r.width, moved: false };
+});
+mp.addEventListener('pointermove', e => {
+  const d = AR.drag; if (!d || e.pointerId !== d.id) return;
+  const dx = e.clientX - d.x0, dy = e.clientY - d.y0;
+  if (!d.moved && Math.abs(dx) + Math.abs(dy) > 6){ d.moved = true; showLoupe(true); }
+  if (!d.moved) return;
+  const s = curStep(), img = $('#shotImg');                            // the arrow follows the finger, so the finger never hides the tip
+  s.arrow = { x: clamp(d.ax + dx * d.k, 0, img.naturalWidth - 1), y: clamp(d.ay + dy * d.k, 0, img.naturalHeight - 1) };
+  placeArrow(); drawLoupe();
+});
+function endDrag(e, cancel){
+  const d = AR.drag; if (!d || e.pointerId !== d.id) return;
+  AR.drag = null; showLoupe(false);
+  const s = curStep(), img = $('#shotImg'); if (!s || cancel) return;
+  if (!d.moved){ const r = img.getBoundingClientRect(); s.arrow = { x: clamp((e.clientX - r.left) * d.k, 0, img.naturalWidth - 1), y: clamp((e.clientY - r.top) * d.k, 0, img.naturalHeight - 1) }; }
+  arrowPlaced(s);
+}
+mp.addEventListener('pointerup', e => endDrag(e, false));
+mp.addEventListener('pointercancel', e => endDrag(e, true));
+mp.addEventListener('keydown', e => {
+  const s = curStep(), img = $('#shotImg'), m = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+  if (!s || !s.arrow || !m) return;
+  e.preventDefault(); const st = e.shiftKey ? 10 : 1;
+  s.arrow = { x: clamp(s.arrow.x + m[0] * st, 0, img.naturalWidth - 1), y: clamp(s.arrow.y + m[1] * st, 0, img.naturalHeight - 1) };
+  placeArrow(); clearTimeout(AR.kt); AR.kt = setTimeout(() => arrowPlaced(s), 500);
+});
+function arrowPlaced(s){
+  s.arrowMoved = true; placeArrow(); updateSteps(); showAi(''); checkInput();
+  if (READ_CHECK) startAiRead(s, null);                               // start reading now, so the answer is ready at Confirm
+  if (parseReading() == null) setTimeout(() => $('#reading').focus({ preventScroll: true }), 50);
+}
+function startAiRead(s, expect){
+  if (s.aiRun) s.aiRun.stop = true;
+  const run = { key: s.arrow.x + ',' + s.arrow.y, expect, stop: false };
+  s.aiRun = run;
+  run.promise = (async () => {
+    try { await withTimeout(ocrWorker(), 45000); }
+    catch { return { mm: null, off: true, why: 'reading check not downloaded yet (weak Wi-Fi)' }; }
+    try {
+      const im = await loadImg(s.photoRaw);
+      return await readTapeAt(im, im.naturalWidth, im.naturalHeight, s.arrow.x, s.arrow.y, { expect: expect || 0, stop: () => run.stop });
+    } catch (err){ return { mm: null, why: 'reading check error' }; }
+  })();
+  return run;
+}
+function showAi(html, cls){ const b = $('#aiBox'); b.className = 'aibox' + (cls ? ' ' + cls : '') + (html ? '' : ' hidden'); b.innerHTML = html || ''; }
 function parseReading(){
   const t = $('#reading').value.replace(',', '.').trim(); if (!t) return null;
   const n = parseFloat(t); return isFinite(n) && n > 0 ? n : NaN;
 }
 function checkInput(){                                          // format check only, never shows the spec
-  const I = S.insp; if (!I || !I.cur || I.cur === 'label') return true;
-  const s = I.steps[I.cur], v = parseReading(), m = $('#liveMsg');
-  s.draft = $('#reading').value; m.className = 'gmsg bad';
+  const s = curStep(); if (!s) return true;
+  const v = parseReading(), m = $('#liveMsg');
+  s.draft = $('#reading').value; m.className = 'gmsg bad'; updateSteps();
   if (v == null){ m.textContent = ''; return false; }
   if (isNaN(v)){ m.textContent = 'Numbers only, for example 1005 or 928.5'; return false; }
   if (v < s.spec / 5){ m.textContent = 'This looks like cm. Type mm: 100.5 cm → 1005.'; return false; }
   m.textContent = ''; return true;
 }
-$('#reading').addEventListener('input', checkInput);
+$('#reading').addEventListener('input', () => { checkInput(); showAi(''); });
 $('#reading').addEventListener('keydown', e => { if (e.key === 'Enter') confirmReading(); });
 $('#okReading').addEventListener('click', confirmReading);
-function confirmReading(){
-  const I = S.insp; if (!I || !I.cur || I.cur === 'label') return;
-  const s = I.steps[I.cur], v = parseReading(), e = S.expected;
+let confirming = false;
+async function confirmReading(){
+  const s = curStep(); if (!s || confirming) return;
+  const v = parseReading();
   if (v == null){ $('#liveMsg').className = 'gmsg bad'; $('#liveMsg').textContent = 'Type the tape reading in mm first.'; $('#reading').focus(); return; }
   if (!checkInput()){ $('#reading').focus(); return; }
-  s.value = v; s.status = 'done'; delete s.draft;
+  if (!s.arrowMoved){ $('#liveMsg').className = 'gmsg bad'; $('#liveMsg').textContent = 'Move the arrow to the product edge on the tape first.'; $('#mPhoto').focus(); return; }
+  if (!READ_CHECK) return commitReading(s, v, { status: 'off' });
+  confirming = true; $('#okReading').disabled = true;
+  showAi(`<span class="spin"></span>${OCR.worker ? 'AI is reading the tape at the arrow…' : 'Downloading the AI reading check (first time only)…'}`);
+  const slow = setTimeout(() => {                                     // never keep the QC waiting: after 12 s offer to go on
+    if (!confirming || curStep() !== s) return;
+    $('#aiBox').insertAdjacentHTML('beforeend', '<div class="vactions"><button class="btn small" type="button" id="aiSkip">Continue without waiting</button></div>');
+    $('#aiSkip').addEventListener('click', () => { if (s.aiRun) s.aiRun.stop = true; AR.skip = true; });
+  }, 12000);
+  AR.skip = false;
+  try {
+    const key = s.arrow.x + ',' + s.arrow.y, digits = String(Math.floor(v / 10)).length;
+    let run = s.aiRun && s.aiRun.key === key && !s.aiRun.stop ? s.aiRun : startAiRead(s, v);
+    const skipWait = () => new Promise(r => { const t = setInterval(() => { if (AR.skip){ clearInterval(t); r({ mm: null, why: 'skipped, the check took too long' }); } }, 200); run.promise.then(() => clearInterval(t)); });
+    let res = await Promise.race([run.promise, skipWait()]);
+    if (AR.skip) return commitReading(s, v, { status: 'unread', why: res.why || 'skipped' });
+    const wrongDigits = res.mm != null && res.labels && !res.labels.some(q => String(q).length === digits);
+    if ((res.mm == null && !res.off && !run.expect) || wrongDigits){ run = startAiRead(s, v); res = await Promise.race([run.promise, skipWait()]); }   // read again, now knowing the typed size
+    if (AR.skip) return commitReading(s, v, { status: 'unread', why: 'skipped, the check took too long' });
+    if (curStep() !== s) return;
+    if (res.off) return commitReading(s, v, { status: 'off', why: res.why });
+    if (res.mm != null && Math.abs(res.mm - v) <= READ_MATCH_MM) return commitReading(s, v, { status: 'ok', mm: res.mm });
+    if (res.mm != null){
+      beep('bad');
+      showAi(`<b>Reading does not match the photo</b>
+        <p>At the arrow the tape shows about <strong>${esc(fmm(res.mm))}</strong> mm. You typed <strong>${esc(fmm(v))}</strong> mm.</p>
+        <p>Check the arrow is on the product edge, and check the number you typed.</p>
+        <div class="vactions"><button class="btn small primary" type="button" data-ai="type">Type again</button><button class="btn small" type="button" data-ai="arrow">Move the arrow</button>
+        <button class="btn small" type="button" data-ai="retake">Retake photo</button><button class="btn small" type="button" data-ai="keep">Keep ${esc(fmm(v))} mm</button></div>`, 'bad');
+      AR.pending = { s, v, ai: { status: 'mismatch', mm: res.mm } };
+    } else {
+      showAi(`<b>AI could not read the tape at the arrow</b>
+        <p>${esc(res.why || 'tape numbers not readable')}. Put the arrow tip on the tape edge where the product ends; the numbers next to it must be sharp.</p>
+        <div class="vactions"><button class="btn small primary" type="button" data-ai="arrow">Move the arrow</button><button class="btn small" type="button" data-ai="retake">Retake photo</button>
+        <button class="btn small" type="button" data-ai="keep">Continue without AI check</button></div>`, 'warn');
+      AR.pending = { s, v, ai: { status: 'unread', why: res.why } };
+    }
+  } finally { clearTimeout(slow); confirming = false; $('#okReading').disabled = false; }
+}
+$('#aiBox').addEventListener('click', e => {
+  const b = e.target.closest('button[data-ai]'); if (!b) return;
+  const p = AR.pending, act = b.dataset.ai;
+  if (act === 'type'){ showAi(''); const i = $('#reading'); i.focus(); i.select(); }
+  else if (act === 'arrow'){ showAi(''); $('#mPhoto').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); $('#mPhoto').focus({ preventScroll: true }); $('#mPhoto').classList.add('idle'); }
+  else if (act === 'retake') $('#retake').click();
+  else if (act === 'keep' && p && curStep() === p.s && parseReading() === p.v) commitReading(p.s, p.v, p.ai);
+  AR.pending = act === 'keep' ? null : AR.pending;
+});
+/* the saved photo shows where the QC pointed, the typed reading and what the AI read */
+async function markPhoto(s, v, ai){
+  try {
+    const im = await loadImg(s.photoRaw), W = im.naturalWidth, H = im.naturalHeight, c = document.createElement('canvas');
+    c.width = W; c.height = H; const x = c.getContext('2d'); x.drawImage(im, 0, 0);
+    const L = Math.max(W, H) * .085, k = L / 60;
+    x.save(); x.translate(s.arrow.x, s.arrow.y); x.scale(k * (s.arrow.x > W * .7 ? -1 : 1), k * (s.arrow.y > H * .6 ? -1 : 1)); x.translate(-4, -4);
+    const p = new Path2D('M4 4 L32.3 15.3 L26.6 21 L56.3 50.7 L50.7 56.3 L21 26.6 L15.3 32.3 Z');
+    x.lineJoin = 'round'; x.lineWidth = 3; x.strokeStyle = '#fff'; x.stroke(p); x.fillStyle = '#000'; x.fill(p);
+    x.restore();
+    const txt = `${NAMES[S.insp.cur]}: typed ${fmm(v)} mm` + (ai.status === 'ok' ? `  |  AI read ${fmm(ai.mm)} mm, matches` :
+      ai.status === 'mismatch' ? `  |  AI read ${fmm(ai.mm)} mm, CHECK` : ai.status === 'unread' ? '  |  AI could not read' : '  |  AI check off');
+    const fs = Math.round(Math.max(W, H) * .028); x.font = `700 ${fs}px Barlow, Arial, sans-serif`;
+    const tw = x.measureText(txt).width, pad = fs * .45;
+    x.fillStyle = ai.status === 'ok' ? 'rgba(23,128,61,.88)' : ai.status === 'mismatch' ? 'rgba(200,38,31,.9)' : 'rgba(0,0,0,.75)';
+    x.fillRect(pad, H - fs - pad * 3, tw + pad * 2, fs + pad * 2);
+    x.fillStyle = '#fff'; x.textBaseline = 'top'; x.fillText(txt, pad * 2, H - fs - pad * 2);
+    return c.toDataURL('image/jpeg', .82);
+  } catch { return s.photoRaw; }
+}
+async function commitReading(s, v, ai){
+  const e = S.expected;
+  if (s.aiRun) s.aiRun.stop = true;
+  s.value = v; s.ai = ai; delete s.draft;
   const dev = Math.abs(v - s.spec);
   s.grade = dev <= e.tol + 1e-9 ? 'ok' : dev <= e.tol + MINOR_BAND_MM + 1e-9 ? 'minor' : 'bad';
   s.ok = s.grade === 'ok'; s.over = Math.round((dev - e.tol) * 10) / 10;
-  beep('tick');
+  s.photo = await markPhoto(s, v, ai);
+  if (curStep() !== s) return;
+  s.status = 'done';
+  showAi(''); beep('tick');
   $('#measure').classList.add('hidden');
   goNext();
 }
 $('#retake').addEventListener('click', () => {
-  const I = S.insp; if (!I || !I.cur) return; const s = I.steps[I.cur]; delete s.photo;
+  const I = S.insp; if (!I || !I.cur) return; const s = I.steps[I.cur];
+  if (s.aiRun) s.aiRun.stop = true;
+  delete s.photo; delete s.photoRaw; delete s.arrow; delete s.arrowMoved; delete s.aiRun; showAi('');
   $('#measure').classList.add('hidden'); renderRail(); applyCamMode(); if (!stream) startCam();
 });
-$('#shotBtn').addEventListener('click', () => { $('#photoBig').src = $('#shotImg').src; $('#photoDlg').showModal(); });
+$('#shotBtn').addEventListener('click', () => { const s = curStep(); $('#photoBig').src = (s && s.photoRaw) || $('#shotImg').src; $('#photoDlg').showModal(); });
 $('#photoClose').addEventListener('click', () => $('#photoDlg').close());
 
 /* ---------- decoding ---------- */
@@ -797,16 +990,24 @@ function tapeDetect(g, w, h, opt){
   const p = new Float32Array(L), q = new Float32Array(L), cs = new Float32Array(L + 1);
   const coh = (A, B) => { let s = 0; for (let i = 0; i < L; i++) s += A.q[i] * B.q[i]; return s / Math.sqrt(A.e * B.e); };  // ticks line up on neighbouring lines
   let best = { found: false, run: 0, angle: 0, lag: 0, score: 0 };
-  for (let a = 0; a < 180; a += 12){
+  const angs = opt.angles || [0, 12, 24, 36, 48, 60, 72, 84, 96, 108, 120, 132, 144, 156, 168];
+  for (const a of angs){
     const t = a * Math.PI / 180, dx = Math.cos(t), dy = Math.sin(t), nx = -dy, ny = dx;
     const flags = [];
     for (let o = -R; o <= R; o += STEP){
       const ox = cx + nx * o, oy = cy + ny * o;
       let ok = true;
       for (let i = 0; i < L; i++){
-        const x = Math.round(ox + dx * (i - L / 2)), y = Math.round(oy + dy * (i - L / 2));
-        if (x < 0 || y < 0 || x >= w || y >= h){ ok = false; break; }
-        p[i] = g[y * w + x];
+        const fx = ox + dx * (i - L / 2), fy = oy + dy * (i - L / 2);
+        if (opt.bilinear){                                                   // smooth sampling along diagonal lines (reading check only)
+          if (fx < 0 || fy < 0 || fx >= w - 1 || fy >= h - 1){ ok = false; break; }
+          const x0 = fx | 0, y0 = fy | 0, ax = fx - x0, ay = fy - y0, kk = y0 * w + x0;
+          p[i] = (g[kk] * (1 - ax) + g[kk + 1] * ax) * (1 - ay) + (g[kk + w] * (1 - ax) + g[kk + w + 1] * ax) * ay;
+        } else {
+          const x = Math.round(fx), y = Math.round(fy);
+          if (x < 0 || y < 0 || x >= w || y >= h){ ok = false; break; }
+          p[i] = g[y * w + x];
+        }
       }
       if (!ok){ flags.push(null); continue; }
       cs[0] = 0; for (let i = 0; i < L; i++) cs[i + 1] = cs[i] + p[i];
@@ -860,8 +1061,7 @@ async function guardTick(){
       try { const pr = await AI.model.predict(v); const hit = pr.find(x => AI.okRe.test(x.className)) || pr[0];
         guard.ai.push(hit.probability); if (guard.ai.length > 3) guard.ai.shift(); } catch {}
       guard.aiOk = guard.ai.filter(p => p >= AI.min).length >= 2;
-      guard.aiSure = guard.ai.filter(p => p >= AI.sure).length >= 2;
-    } else { guard.aiOk = true; guard.aiSure = false; }
+    } else guard.aiOk = true;
     guard.ok = guard.tape && (!AI.model || guard.aiOk);    // strict: the tape pattern AND the AI must both agree (AI alone can be fooled by walls)
     showGuard();
   } finally { guard.busy = false; }
@@ -876,13 +1076,13 @@ function showGuard(){
   const late = Date.now() - guard.start > FORCE_AFTER_S * 1000;
   $('#forceBtn').classList.toggle('hidden', guard.ok || !late || camMode() !== 'photo');
 }
-$('#forceBtn').addEventListener('click', () => { stopAuto(); takeShot(AI.model && !guard.aiOk ? 'tape on product not recognised' : 'no tape detected'); });
+$('#forceBtn').addEventListener('click', () => { stopAuto(); takeShot(AI.model && !guard.aiOk && guard.tape ? 'tape on product not recognised' : 'no tape detected'); });
 
 /* optional product model: put model.json, metadata.json and weights.bin (Teachable Machine export) next to index.html */
-const AI = { model: null, okRe: /^(ok|good|pass|correct|tape)/i, min: .75, sure: .95, why: '', loading: false, timer: null, tries: 0 };
+const AI = { model: null, okRe: /^(ok|good|pass|correct|tape)/i, min: .75, why: '', loading: false, timer: null, tries: 0 };
 const loadScript = src => new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => { s.remove(); rej(new Error('download')); }; document.head.appendChild(s); });
 const aiText = () => AI.model ? 'AI on' : AI.loading ? 'AI loading…' : 'AI off' + (AI.why ? ` (${AI.why})` : '');
-function showAiInfo(){ const el = $('#listinfo'); el.textContent = el.textContent.replace(/AI (on|off|loading…).*$/, aiText()); }
+function showAiInfo(){ const el = $('#listinfo'); el.textContent = el.textContent.replace(/AI (on|off|loading…).*$/, aiText() + ', ' + ocrText()); }
 function aiOff(why, retry){
   AI.why = why; showAiInfo();
   if (retry && !AI.timer) AI.timer = setTimeout(() => { AI.timer = null; loadAI(); }, AI.tries < 3 ? 20000 : 60000);   // keep trying in the background
@@ -903,6 +1103,240 @@ async function loadAI(){
     AI.why = ''; toast('Product check model loaded: ' + AI.model.getClassLabels().join(' / '));
   } finally { AI.loading = false; showAiInfo(); }
 }
+
+/* ---------- AI reading check: reads the tape at the arrow, on the tablet, free (Tesseract reads the cm numbers) ---------- */
+const OCR = { worker: null, loading: null, why: '', tries: 0, timer: null };
+const TESS = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/';
+const ocrText = () => OCR.worker ? 'reading check on' : OCR.loading ? 'reading check loading…' : 'reading check off' + (OCR.why ? ` (${OCR.why})` : '');
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+async function ocrWorker(){
+  if (OCR.worker) return OCR.worker;
+  if (OCR.loading) return OCR.loading;
+  OCR.tries++;
+  OCR.loading = (async () => {
+    if (!window.Tesseract) await loadScript(TESS + 'tesseract.min.js');
+    const w = await withTimeout(Tesseract.createWorker('eng', 1, {
+      workerPath: TESS + 'worker.min.js',
+      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1/',
+      langPath: 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int' }), 90000);
+    await w.setParameters({ tessedit_char_whitelist: '0123456789' });
+    OCR.worker = w; OCR.why = ''; return w;
+  })();
+  showAiInfo();
+  try { return await OCR.loading; }
+  catch (e){ OCR.why = 'download failed, weak Wi-Fi, retrying'; throw e; }
+  finally { OCR.loading = null; showAiInfo(); }
+}
+function loadOCR(){                                        // in the background; keeps trying on weak Wi-Fi
+  clearTimeout(OCR.timer);
+  ocrWorker().catch(() => { OCR.timer = setTimeout(loadOCR, OCR.tries < 3 ? 30000 : 90000); });
+}
+
+/* draw a straight strip of the photo along the tape, centred on the arrow tip (tip = centre of the strip) */
+function tapeStrip(src, W, H, tx, ty, angDeg, halfLen, halfWid, scale, cy){
+  scale = scale || 1;
+  const c = document.createElement('canvas'); c.width = Math.round(halfLen * 2 * scale); c.height = Math.round(halfWid * 2 * scale);
+  const x = c.getContext('2d', { willReadFrequently: true });
+  x.fillStyle = '#808080'; x.fillRect(0, 0, c.width, c.height);
+  x.imageSmoothingQuality = 'high';
+  x.translate(c.width / 2, c.height / 2 - (cy || 0) * scale); x.scale(scale, scale); x.rotate(-angDeg * Math.PI / 180); x.translate(-tx, -ty);
+  x.drawImage(src, 0, 0, W, H);
+  // grey + contrast stretch (2nd..98th percentile): dark print on yellow, white or red tape becomes black on white
+  const im = x.getImageData(0, 0, c.width, c.height), d = im.data, n = d.length / 4, hist = new Uint32Array(256), gv = new Uint8Array(n);
+  for (let i = 0, j = 0; j < n; i += 4, j++){ const v = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8; gv[j] = v; hist[v]++; }
+  let lo = 0, hi = 255, acc = 0; for (; lo < 255 && (acc += hist[lo]) < n * .02; lo++); acc = 0; for (; hi > 0 && (acc += hist[hi]) < n * .02; hi--);
+  const k = 255 / Math.max(1, hi - lo);
+  for (let i = 0, j = 0; j < n; i += 4, j++){ const v = Math.max(0, Math.min(255, (gv[j] - lo) * k)); d[i] = d[i + 1] = d[i + 2] = v; }
+  x.setTransform(1, 0, 0, 1, 0, 0); x.putImageData(im, 0, 0);
+  return c;
+}
+
+/* cm lines = thin dark lines that cross the whole number row ("10|6"); digit strokes only cover the digit height */
+function lineProfile(band){
+  const W = band.width, H = band.height, d = band.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
+  const G = new Float32Array(W * H); for (let i = 0, j = 0; j < G.length; i += 4, j++) G[j] = d[i];
+  const k1 = Math.max(3, Math.round(H / 30)), y0 = Math.round(H * .08), y1 = Math.round(H * .92), s = new Float32Array(W);
+  for (const k of [k1, k1 * 2]){                                        // thin lines, and wider ones on a blurred photo
+    for (let x = k; x < W - k; x++){
+      let n = 0;
+      for (let y = y0; y < y1; y++){ const r = y * W, v = G[r + x]; if (v < Math.min(G[r + x - k], G[r + x + k]) - 14) n++; }
+      s[x] = Math.max(s[x], n / (y1 - y0));                             // share of the row height where this column is a thin dark line
+    }
+  }
+  return { s, k: k1 };
+}
+function bandLines(band){
+  const { s, k } = lineProfile(band), W = band.width, peaks = [];
+  for (let x = 2; x < W - 2; x++) if (s[x] >= .5 && s[x] >= s[x - 1] && s[x] > s[x + 1]){
+    if (peaks.length && x - peaks[peaks.length - 1].x <= k){ if (s[x] > peaks[peaks.length - 1].s) peaks[peaks.length - 1] = { x, s: s[x] }; }
+    else peaks.push({ x, s: s[x] });
+  }
+  return peaks;
+}
+function lineSharpness(band, n){ const p = bandLines(band).map(q => q.s).sort((a, b) => b - a); return p.slice(0, n).reduce((a, b) => a + b, 0); }
+let ocrLock = Promise.resolve();
+function ocrSyms(canvas, psm){                                       // one job at a time: page mode and picture always belong together
+  const job = ocrLock.then(() => ocrSyms1(canvas, psm));
+  ocrLock = job.catch(() => {});
+  return job;
+}
+async function ocrSyms1(canvas, psm){
+  const w = await ocrWorker();
+  await w.setParameters({ tessedit_pageseg_mode: psm });
+  const { data } = await w.recognize(canvas, {}, { blocks: true });
+  const out = [];
+  for (const b of data.blocks || []) for (const p of b.paragraphs) for (const l of p.lines) for (const wd of l.words) for (const q of wd.symbols)
+    out.push({ t: q.text, c: q.confidence, x0: q.bbox.x0, y0: q.bbox.y0, x1: q.bbox.x1, y1: q.bbox.y1 });
+  return out;
+}
+function symRows(syms){                               // rows of digits found by the quick pass: [{ y, h, n }]
+  syms = syms.filter(q => /^\d$/.test(q.t) && q.y1 > q.y0);
+  const rows = [];
+  syms.map(q => ({ y: (q.y0 + q.y1) / 2, h: q.y1 - q.y0 })).sort((a, b) => a.y - b.y).forEach(q => {
+    const r = rows.find(r => Math.abs(r.y - q.y) < Math.max(r.h, q.h) * .5);
+    if (r){ r.y = (r.y * r.n + q.y) / (r.n + 1); r.hs.push(q.h); r.n++; } else rows.push({ y: q.y, h: q.h, hs: [q.h], n: 1 });
+  });
+  rows.forEach(r => { r.hs.sort((a, b) => a - b); r.h = r.hs[r.hs.length >> 1]; });
+  return rows.sort((a, b) => b.n - a.n);
+}
+
+/* tape direction: score every angle (3 degree steps) by how strong the tick pattern is; return the best 2 different ones */
+function tapeAngles(g, w, h){
+  const sc = [];
+  for (let a = 0; a < 180; a += 3){ const r = tapeDetect(g, w, h, { step: 2, thr: .42, coh: .5, minRun: 3, angles: [a], bilinear: true }); if (r.run >= 3) sc.push({ a, s: r.score }); }
+  sc.sort((p, q) => q.s - p.s);
+  const out = [];
+  for (const c of sc){ if (out.every(o => Math.min(Math.abs(o.a - c.a), 180 - Math.abs(o.a - c.a)) >= 15)) out.push(c); if (out.length === 2) break; }
+  return out.filter(o => o.s >= out[0].s * .85).map(o => o.a);
+}
+
+/* evenly spaced cm lines in a tall band: [{x, s}] with spacing D */
+function gridLines(band, hPx){
+  const all = bandLines(band), smax = Math.max(0, ...all.map(p => p.s));
+  const peaks = all.filter(p => p.s >= Math.max(.5, smax * .78));      // cm lines are the longest lines; 5 mm ticks and digit strokes are shorter
+  if (peaks.length < 2) return null;
+  const near = (x, tol) => { let b = null; for (const p of peaks) if (Math.abs(p.x - x) <= tol && (!b || Math.abs(p.x - x) < Math.abs(b.x - x))) b = p; return b; };
+  let best = null;
+  const Ds = new Set();
+  for (let i = 0; i < peaks.length; i++) for (let j = i + 1; j < peaks.length; j++){ const D = peaks[j].x - peaks[i].x; if (D >= hPx * 1.1 && D <= hPx * 3.2) Ds.add(Math.round(D)); }
+  for (const D of Ds) for (const p of peaks){
+    const kLo = Math.ceil(-p.x / D), kHi = Math.floor((band.width - p.x) / D), f = [];
+    let sc = 0, hit = 0;
+    for (let k = kLo; k <= kHi; k++){ const q = near(p.x + k * D, D * .07); f.push(q); if (q){ sc += q.s; hit++; } }
+    const fi = f.findIndex(Boolean), la = f.length - 1 - [...f].reverse().findIndex(Boolean);
+    let miss = 0; for (let k = fi; k <= la; k++) if (!f[k]) miss++;
+    sc -= miss * .7;
+    if (hit >= 2 && (!best || sc > best.sc)) best = { sc, D, lines: f.filter(Boolean), miss };
+  }
+  if (!best) return null;
+  // refine spacing locally (perspective): keep the found lines in order
+  const lines = best.lines.sort((a, b) => a.x - b.x);
+  lines.D = best.D; lines.miss = best.miss;
+  return lines;
+}
+
+/* the number printed around one cm line ("18" left of the line, "3" right of it): cut out, join the halves, black on white */
+async function lineValue(band, lx, D, yTop, yBot){
+  const lw = Math.max(2, Math.round(D * .03));
+  const xa = Math.max(0, Math.round(lx - .62 * D)), xb = Math.min(band.width, Math.round(lx + .42 * D));
+  const wl = Math.round(lx - lw) - xa, wr = xb - Math.round(lx + lw), hh = Math.round(yBot - yTop);
+  if (wl < 8 || wr < 4 || hh < 8) return null;
+  const k = Math.max(1, Math.min(3, 64 / hh)), pad = Math.round(hh * k * .35);
+  const c = document.createElement('canvas'); c.width = Math.round((wl + wr) * k) + pad * 2; c.height = Math.round(hh * k) + pad * 2;
+  const x = c.getContext('2d', { willReadFrequently: true }); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.imageSmoothingQuality = 'high';
+  x.drawImage(band, xa, yTop, wl, hh, pad, pad, wl * k, hh * k);                        // digits left of the line
+  x.drawImage(band, Math.round(lx + lw), yTop, wr, hh, pad + wl * k, pad, wr * k, hh * k);   // digit right of the line, pulled close
+  // black and white (Otsu threshold)
+  const im = x.getImageData(0, 0, c.width, c.height), d = im.data, hist = new Float64Array(256);
+  for (let i = 0; i < d.length; i += 4) hist[d[i]]++;
+  let tot = d.length / 4, sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
+  let wB = 0, sB = 0, best = 0, thr = 128;
+  for (let t = 0; t < 256; t++){ wB += hist[t]; if (!wB) continue; const wF = tot - wB; if (!wF) break; sB += t * hist[t];
+    const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) * (mB - mF); if (v > best){ best = v; thr = t; } }
+  for (let i = 0; i < d.length; i += 4){ const v = d[i] > thr ? 255 : 0; d[i] = d[i + 1] = d[i + 2] = v; }
+  x.putImageData(im, 0, 0);
+  const reads = [];
+  for (const psm of ['8', '7']){
+    const syms = await ocrSyms(c, psm);
+    const t = syms.filter(q => /^\d$/.test(q.t)).map(q => q.t).join('');      // reading order from the reader (its letter boxes are not reliable)
+    if (/^\d{2,4}$/.test(t) && t[0] !== '0') reads.push(+t);
+    if (reads.length && psm === '8') break;
+  }
+  return reads.length ? reads[0] : null;
+}
+
+/* full check: photo (canvas or image), arrow tip in photo pixels -> { mm, ... } or { mm: null, why } */
+async function readTapeAt(src, W, H, tx, ty, O){
+  O = Object.assign({ len: .25, wid: .12, digitPx: 46, budget: 15000, stop: () => false }, O || {});
+  const t0 = performance.now(), M = Math.max(W, H), done = (o) => Object.assign(o, { ms: Math.round(performance.now() - t0) });
+  const late = () => performance.now() - t0 > O.budget || O.stop();      // time limit, or the arrow was moved again
+  const side = Math.round(.6 * Math.min(W, H));
+  const g0 = document.createElement('canvas'); g0.width = g0.height = 320;
+  const gx = g0.getContext('2d', { willReadFrequently: true });
+  gx.fillStyle = '#808080'; gx.fillRect(0, 0, 320, 320);
+  gx.drawImage(src, tx - side / 2, ty - side / 2, side, side, 0, 0, 320, 320);
+  const angs = tapeAngles(greyFrom(gx, 320, 320), 320, 320);
+  if (!angs.length) return done({ mm: null, why: 'no tape at the arrow' });
+  await ocrWorker();
+  const halfLen = O.len * M, halfWid = O.wid * M, wantDigits = O.expect ? String(Math.floor(O.expect / 10)).length : 0;
+  const results = [];
+  for (const a of angs) for (const ang of [a, a + 180]){
+    if (late()) break;
+    // 1. quick pass: where is the row of cm numbers?
+    const strip = tapeStrip(src, W, H, tx, ty, ang, halfLen, halfWid, 1);
+    const rows = symRows(await ocrSyms(strip, '11')).slice(0, 3);
+    for (const r0 of rows) for (const hf of [1, 1.4, .7]){
+      if (late()) break;
+      const r = { y: r0.y, h: r0.h * hf };
+      // 2. tall band: the number row and the tick edge below it, enlarged so digits are ~46 px high
+      const sc = Math.max(1, Math.min(3, O.digitPx / r.h)), top = r.y - .8 * r.h, bot = r.y + 1.8 * r.h;
+      const cy = (top + bot) / 2 - strip.height / 2, hw = (bot - top) / 2;
+      let band = tapeStrip(src, W, H, tx, ty, ang, halfLen, hw, sc, cy), bestSh = lineSharpness(band, 5), bang = ang;
+      for (let da = -6; da <= 6; da += 1.5){                            // straighten: cm lines exactly upright
+        if (!da) continue;
+        const b2 = tapeStrip(src, W, H, tx, ty, ang + da, halfLen, hw, sc, cy), sh = lineSharpness(b2, 5);
+        if (sh > bestSh + .05){ bestSh = sh; band = b2; bang = ang + da; }
+      }
+      const lines = gridLines(band, r.h * sc);
+      if (!lines || lines.length < 2) continue;
+      // 3. the cm lines on both sides of the arrow, and the number printed on each
+      const tip = band.width / 2;
+      let ia = -1; for (let k = 0; k < lines.length; k++) if (lines[k].x <= tip) ia = k;
+      const pick = [ia - 1, ia, ia + 1, ia + 2].filter(k => k >= 0 && k < lines.length);
+      const yTop = .2 * r.h * sc, yBot = 1.4 * r.h * sc;
+      const vals = [];
+      for (const k of pick){ const v = await lineValue(band, lines[k].x, lines.D, yTop, yBot); vals.push({ k, v, x: lines[k].x }); }
+      // values must count up by one from line to line (or by 2 over a missing line)
+      let off = null, agree = 0;
+      for (const q of vals) if (q.v != null){
+        const o = q.v - q.k, n = vals.filter(z => z.v != null && z.v - z.k === o).length;
+        if (n > agree){ agree = n; off = o; }
+      }
+      if (off == null || agree < 2) { results.push({ mm: null, why: 'tape numbers not readable', agree, vals: vals.map(q => q.v) }); continue; }
+      const lv = lines.map((l, k) => ({ v: k + off, x: l.x }));
+      // 4. reading at the arrow between the two cm lines around it
+      let mm = null;
+      for (let k = 0; k + 1 < lv.length; k++) if (tip >= lv[k].x && tip <= lv[k + 1].x){
+        const a = lv[k], b = lv[k + 1], gap = b.x - a.x;
+        if (gap > lines.D * 1.25) break;                                   // a line is missing here: not sure
+        mm = 10 * a.v + 10 * (tip - a.x) / gap;
+      }
+      if (mm == null){ const n = lv.reduce((m, q) => !m || Math.abs(q.x - tip) < Math.abs(m.x - tip) ? q : m, null); if (n && Math.abs(tip - n.x) <= lines.D * .6) mm = 10 * n.v + 10 * (tip - n.x) / lines.D; }
+      const digitsOk = !wantDigits || String(lv[0].v).length === wantDigits || String(lv[lv.length - 1].v).length === wantDigits;
+      results.push({ mm, agree, digitsOk, vals: vals.map(q => q.v), labels: lv.map(q => q.v), ang: bang, band, lines: lv, D: lines.D, sc,
+                     why: mm == null ? 'arrow is too far from a clear cm line' : '' });
+      if (mm != null && agree >= 3 && digitsOk) break;
+    }
+    const good = results.find(q => q.mm != null && q.agree >= 3 && q.digitsOk);
+    if (good) break;
+  }
+  const ok = results.filter(q => q.mm != null && q.digitsOk).sort((p, q) => q.agree - p.agree);
+  if (O.stop()) return done({ mm: null, why: 'cancelled', cancelled: true });
+  if (!ok.length){ const r0 = results.find(q => q.why) || {}; return done({ mm: null, why: r0.why || 'tape numbers not readable', tried: results.length }); }
+  const b = ok[0];
+  return done({ mm: Math.round(b.mm * 2) / 2, why: '', labels: b.labels, vals: b.vals, agree: b.agree, lines: b.lines, d: b.D, pxPerMm: b.D / 10 / b.sc, ang: b.ang, strip: b.band });
+}
+
 
 const auto = { timer: null, prev: null, steadySince: 0, hist: [], start: 0, lastFocus: 0 };
 const acv = document.createElement('canvas'); acv.width = 240; acv.height = 180;
@@ -996,7 +1430,7 @@ async function camTick(){
   } finally { camBusy = false; }
 }
 $('#shutter').addEventListener('click', () => {
-  if (!guard.ok){ toast(AI.model && !guard.aiOk ? 'Tape on product not recognised. Show the tape reading on the product.' : 'No tape measure seen. Put the tape reading on the yellow line.'); beep('bad'); return; }
+  if (!guard.ok){ toast(guard.tape ? 'Tape on product not recognised. Show the tape reading on the product.' : 'No tape measure seen. Put the tape reading on the yellow line.'); beep('bad'); return; }
   stopAuto(); takeShot();
 });
 $('#fileShot').addEventListener('change', async e => {
@@ -1008,7 +1442,8 @@ $('#fileShot').addEventListener('change', async e => {
 });
 function gotPhoto(p, flag){
   const I = S.insp; if (!I || !I.cur || I.cur === 'label') return;
-  I.steps[I.cur].photo = p; I.steps[I.cur].flag = flag || ''; beep('tick');
+  const st = I.steps[I.cur]; if (st.aiRun) st.aiRun.stop = true;
+  st.photo = p; st.photoRaw = p; st.arrow = null; st.arrowMoved = false; delete st.aiRun; st.flag = flag || ''; beep('tick');
   const fl = document.createElement('div'); fl.style.cssText = 'position:absolute;inset:0;background:#fff;opacity:.7;transition:opacity .3s';
   $('#camwrap').appendChild(fl); requestAnimationFrame(() => { fl.style.opacity = 0; }); setTimeout(() => fl.remove(), 350);
   renderRail(); applyCamMode(); renderMeasure();
@@ -1063,6 +1498,14 @@ function finish(){
   if (status === 'fail' && L.status === 'done' && !L.ok) remark = `NG ${L.code} = ${L.found || 'not in list'}, expected ${e.model} ${e.code}`;
   else remark = `${L.code ? L.code + ' ' : ''}${e.model} ${status === 'fail' ? 'NG' : status === 'minor' ? 'OK (minor)' : 'OK'}${sizeTxt ? ', ' + sizeTxt : ''}`;
   if (flags.length) remark += ` [CHECK PHOTO: ${flags.join('; ')}]`;
+  const aiOk = [], aiBad = [], aiUn = [], aiOff = [];
+  [[W, 'W'], [Ln, 'L']].forEach(([d, n]) => { if (d.status !== 'done' || !d.ai) return;
+    if (d.ai.status === 'ok') aiOk.push(n); else if (d.ai.status === 'mismatch') aiBad.push(`${n} typed ${fmm(d.value)}, photo ${fmm(d.ai.mm)}`);
+    else if (d.ai.status === 'unread') aiUn.push(n); else aiOff.push(n); });
+  if (aiOk.length) remark += ` [AI read ${aiOk.join('+')}: OK]`;
+  if (aiBad.length) remark += ` [CHECK READING: ${aiBad.join('; ')}]`;
+  if (aiUn.length) remark += ` [AI could not read ${aiUn.join('+')}]`;
+  if (aiOff.length) remark += ' [AI read check off]';
   const result = status === 'pass' ? 'PASS' : status === 'fail' ? 'FAIL' : status === 'minor' ? 'MINOR' : 'CHECK';
   const rec = { id: S.device + '-' + now.getTime(), date: dStr(now), time: tStr(now), form: e.form, customer: e.customer, expected: e.model, desc: e.desc,
     expectedCode: e.code, code: L.code || '', found: L.status === 'done' ? (L.found || '(not in list)') : '', labelResult: L.status === 'na' ? 'NO CODE IN LIST' : L.ok ? 'PASS' : 'FAIL',
@@ -1081,7 +1524,9 @@ function finish(){
     if (!d.need) checks.push({ cls: 'skip', b: n, span: 'not required for this model' });
     else if (d.status !== 'done') checks.push({ cls: 'skip', b: `${n} not measured`, span: 'stopped because the label is wrong' });
     else checks.push({ cls: d.grade, b: `${n} ${fmm(d.value)} mm`, span: d.grade === 'ok' ? `In tolerance (±${fmm(e.tol)} mm)` : '',
-      oot: d.grade === 'minor' ? `Out of tolerance by ${fmm(d.over)} mm, still acceptable` : d.grade === 'bad' ? 'Wrong size: outside the acceptable limit' : '', photo: d.photo, note: d.flag ? `Photo flagged: ${d.flag}` : '' });
+      oot: d.grade === 'minor' ? `Out of tolerance by ${fmm(d.over)} mm, still acceptable` : d.grade === 'bad' ? 'Wrong size: outside the acceptable limit' : '', photo: d.photo,
+      note: [d.flag ? `Photo flagged: ${d.flag}` : '', !d.ai ? '' : d.ai.status === 'ok' ? 'AI read the photo: matches' : d.ai.status === 'mismatch' ? `AI read the photo: about ${fmm(d.ai.mm)} mm. Kept by QC, supervisor will check.` :
+        d.ai.status === 'unread' ? 'AI could not read the photo' : ''].filter(Boolean).join('. ') });
   });
   renderRail(); applyCamMode();
   showVerdict({ status, word, why, checks, remark, actions: [['Next carton', nextCarton, true]] });
@@ -1094,7 +1539,7 @@ function showVerdict(o){
   $('#vword').textContent = o.word; $('#vwhy').textContent = o.why || '';
   $('#checks').innerHTML = (o.checks || []).map((c, i) => `<li class="${c.cls}"><span class="ic">${c.cls === 'ok' ? '✓' : c.cls === 'bad' ? '✗' : c.cls === 'minor' ? '!' : '–'}</span>
     <div><b>${esc(c.b)}</b><span>${esc(c.span)}</span>${c.oot ? `<span class="${c.cls === 'bad' || c.cls === 'minor' ? 'oot' : ''}">${esc(c.oot)}</span>` : ''}
-    ${c.note ? `<span class="flag" style="display:block;color:var(--warn)">${esc(c.note)}</span>` : ''}${c.photo ? `<button class="btn link" type="button" data-photo="${i}">See photo</button>` : ''}</div></li>`).join('');
+    ${c.note ? `<span class="flag" style="display:block;color:${/matches/.test(c.note) && !/flagged/.test(c.note) ? 'var(--pass)' : 'var(--warn)'}">${esc(c.note)}</span>` : ''}${c.photo ? `<button class="btn link" type="button" data-photo="${i}">See photo</button>` : ''}</div></li>`).join('');
   $$('#checks [data-photo]').forEach(b => b.addEventListener('click', () => { $('#photoBig').src = o.checks[+b.dataset.photo].photo; $('#photoDlg').showModal(); }));
   $('#vactions').innerHTML = (o.actions || []).map((a, i) => `<button class="btn ${a[2] ? 'primary' : ''}" type="button" data-act="${i}" style="min-width:180px">${esc(a[0])}</button>`).join('');
   $$('#vactions [data-act]').forEach(b => b.addEventListener('click', () => o.actions[+b.dataset.act][1]()));
@@ -1186,7 +1631,7 @@ if (sessionAlive(saved)){
   S.session = saved; showApp();
   if (S.sheetUrl) post({ action: 'check', token: saved.token }).then(j => { if (j && !j.ok && j.error !== 'server'){ LS.set('session', null); showLogin(LOGIN_ERR[j.error] || 'Please log in again.'); } }).catch(() => {});
 } else showLogin();
-loadList().then(flushLog).finally(() => setTimeout(loadAI, 3000));   // product model loads after the Google Sheet, never at the same time
+loadList().then(flushLog).finally(() => { setTimeout(loadAI, 3000); if (READ_CHECK) setTimeout(loadOCR, 9000); });   // Google Sheet first, then the AI files, one after another
 setInterval(flushLog, 60000); window.addEventListener('online', flushLog);
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 })();
