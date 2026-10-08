@@ -382,7 +382,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 
 <script>
 /* ============ SETTINGS: paste your NEW Apps Script Web App URL between the quotes ============ */
-const APP_VERSION = 'R6';
+const APP_VERSION = 'R8';
 const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx4jz-03IVSxS_Bh2ttXY6xGa-dZQk601rCkIwTjpTxiJkyKeU1cMRSl7mIXXbvXpCFPQ/exec';   // Code List 2
 /* Minor band: reading outside the tolerance by up to this many mm = yellow "minor, still acceptable".
    Further out = red FAIL. Example: spec 894, tolerance ±1, band 1 → 893–895 pass, 892 / 896 minor, 891 / 897 and beyond fail. */
@@ -834,7 +834,7 @@ async function confirmReading(){
     if (AR.skip) return commitReading(s, v, { status: 'unread', why: 'skipped, the check took too long' });
     if (curStep() !== s) return;
     if (res.off) return commitReading(s, v, { status: 'off', why: res.why });
-    if (res.mm != null && Math.abs(res.mm - v) <= READ_MATCH_MM) return commitReading(s, v, { status: 'ok', mm: res.mm });
+    if (res.mm != null && Math.abs(res.mm - v) <= READ_MATCH_MM) return commitReading(s, v, { status: 'ok', mm: res.mm, part: !!res.decadeFromTyped });
     if (res.mm != null){
       beep('bad');
       showAi(`<b>Reading does not match the photo</b>
@@ -1133,7 +1133,7 @@ function loadOCR(){                                        // in the background;
 }
 
 /* draw a straight strip of the photo along the tape, centred on the arrow tip (tip = centre of the strip) */
-function tapeStrip(src, W, H, tx, ty, angDeg, halfLen, halfWid, scale, cy){
+function tapeStrip(src, W, H, tx, ty, angDeg, halfLen, halfWid, scale, cy, chan){
   scale = scale || 1;
   const c = document.createElement('canvas'); c.width = Math.round(halfLen * 2 * scale); c.height = Math.round(halfWid * 2 * scale);
   const x = c.getContext('2d', { willReadFrequently: true });
@@ -1143,7 +1143,7 @@ function tapeStrip(src, W, H, tx, ty, angDeg, halfLen, halfWid, scale, cy){
   x.drawImage(src, 0, 0, W, H);
   // grey + contrast stretch (2nd..98th percentile): dark print on yellow, white or red tape becomes black on white
   const im = x.getImageData(0, 0, c.width, c.height), d = im.data, n = d.length / 4, hist = new Uint32Array(256), gv = new Uint8Array(n);
-  for (let i = 0, j = 0; j < n; i += 4, j++){ const v = (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8; gv[j] = v; hist[v]++; }
+  for (let i = 0, j = 0; j < n; i += 4, j++){ const v = chan === 'g' ? d[i + 1] : (d[i] * 77 + d[i + 1] * 150 + d[i + 2] * 29) >> 8; gv[j] = v; hist[v]++; }
   let lo = 0, hi = 255, acc = 0; for (; lo < 255 && (acc += hist[lo]) < n * .02; lo++); acc = 0; for (; hi > 0 && (acc += hist[hi]) < n * .02; hi--);
   const k = 255 / Math.max(1, hi - lo);
   for (let i = 0, j = 0; j < n; i += 4, j++){ const v = Math.max(0, Math.min(255, (gv[j] - lo) * k)); d[i] = d[i + 1] = d[i + 2] = v; }
@@ -1151,29 +1151,36 @@ function tapeStrip(src, W, H, tx, ty, angDeg, halfLen, halfWid, scale, cy){
   return c;
 }
 
-/* cm lines = thin dark lines that cross the whole number row ("10|6"); digit strokes only cover the digit height */
-function lineProfile(band){
+/* cm lines: thin dark lines that are there beside the digits AND down in the tick area.
+   5 mm ticks are only in the tick area, digit strokes only beside the digits. Z = { dig: [y0, y1], tick: [y0, y1] } */
+function lineProfile(band, Z){
   const W = band.width, H = band.height, d = band.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
   const G = new Float32Array(W * H); for (let i = 0, j = 0; j < G.length; i += 4, j++) G[j] = d[i];
-  const k1 = Math.max(3, Math.round(H / 30)), y0 = Math.round(H * .08), y1 = Math.round(H * .92), s = new Float32Array(W);
-  for (const k of [k1, k1 * 2]){                                        // thin lines, and wider ones on a blurred photo
-    for (let x = k; x < W - k; x++){
-      let n = 0;
-      for (let y = y0; y < y1; y++){ const r = y * W, v = G[r + x]; if (v < Math.min(G[r + x - k], G[r + x + k]) - 14) n++; }
-      s[x] = Math.max(s[x], n / (y1 - y0));                             // share of the row height where this column is a thin dark line
+  const zones = Z ? [Z.dig, Z.tick] : [[H * .08, H * .92]];
+  const k1 = Math.max(3, Math.round(H / 30)), s = new Float32Array(W).fill(1);
+  for (const [za, zb] of zones){
+    const y0 = Math.max(0, Math.round(za)), y1 = Math.min(H, Math.round(zb)), zs = new Float32Array(W);
+    if (y1 - y0 < 3){ continue; }
+    for (const k of [k1, k1 * 2]){                                      // thin lines, and wider ones on a blurred photo
+      for (let x = k; x < W - k; x++){
+        let n = 0;
+        for (let y = y0; y < y1; y++){ const r = y * W, v = G[r + x]; if (v < Math.min(G[r + x - k], G[r + x + k]) - 14) n++; }
+        zs[x] = Math.max(zs[x], n / (y1 - y0));
+      }
     }
+    for (let x = 0; x < W; x++) s[x] = Math.min(s[x], zs[x]);
   }
   return { s, k: k1 };
 }
-function bandLines(band){
-  const { s, k } = lineProfile(band), W = band.width, peaks = [];
-  for (let x = 2; x < W - 2; x++) if (s[x] >= .5 && s[x] >= s[x - 1] && s[x] > s[x + 1]){
+function bandLines(band, Z){
+  const { s, k } = lineProfile(band, Z), W = band.width, peaks = [];
+  for (let x = 2; x < W - 2; x++) if (s[x] >= .45 && s[x] >= s[x - 1] && s[x] > s[x + 1]){
     if (peaks.length && x - peaks[peaks.length - 1].x <= k){ if (s[x] > peaks[peaks.length - 1].s) peaks[peaks.length - 1] = { x, s: s[x] }; }
     else peaks.push({ x, s: s[x] });
   }
   return peaks;
 }
-function lineSharpness(band, n){ const p = bandLines(band).map(q => q.s).sort((a, b) => b - a); return p.slice(0, n).reduce((a, b) => a + b, 0); }
+function lineSharpness(band, n, Z){ const p = bandLines(band, Z).map(q => q.s).sort((a, b) => b - a); return p.slice(0, n).reduce((a, b) => a + b, 0); }
 let ocrLock = Promise.resolve();
 function ocrSyms(canvas, psm){                                       // one job at a time: page mode and picture always belong together
   const job = ocrLock.then(() => ocrSyms1(canvas, psm));
@@ -1211,14 +1218,14 @@ function tapeAngles(g, w, h){
 }
 
 /* evenly spaced cm lines in a tall band: [{x, s}] with spacing D */
-function gridLines(band, hPx){
-  const all = bandLines(band), smax = Math.max(0, ...all.map(p => p.s));
-  const peaks = all.filter(p => p.s >= Math.max(.5, smax * .78));      // cm lines are the longest lines; 5 mm ticks and digit strokes are shorter
+function gridLines(band, hPx, Z){
+  const all = bandLines(band, Z), smax = Math.max(0, ...all.map(p => p.s));
+  const peaks = all.filter(p => p.s >= Math.max(.45, smax * .7));      // cm lines are the longest lines; 5 mm ticks and digit strokes are shorter
   if (peaks.length < 2) return null;
   const near = (x, tol) => { let b = null; for (const p of peaks) if (Math.abs(p.x - x) <= tol && (!b || Math.abs(p.x - x) < Math.abs(b.x - x))) b = p; return b; };
   let best = null;
   const Ds = new Set();
-  for (let i = 0; i < peaks.length; i++) for (let j = i + 1; j < peaks.length; j++){ const D = peaks[j].x - peaks[i].x; if (D >= hPx * 1.1 && D <= hPx * 3.2) Ds.add(Math.round(D)); }
+  for (let i = 0; i < peaks.length; i++) for (let j = i + 1; j < peaks.length; j++){ const D = peaks[j].x - peaks[i].x; if (D >= hPx * 1.1 && D <= hPx * 7) Ds.add(Math.round(D)); }
   for (const D of Ds) for (const p of peaks){
     const kLo = Math.ceil(-p.x / D), kHi = Math.floor((band.width - p.x) / D), f = [];
     let sc = 0, hit = 0;
@@ -1237,8 +1244,8 @@ function gridLines(band, hPx){
 
 /* the number printed around one cm line ("18" left of the line, "3" right of it): cut out, join the halves, black on white */
 async function lineValue(band, lx, D, yTop, yBot){
-  const lw = Math.max(2, Math.round(D * .03));
-  const xa = Math.max(0, Math.round(lx - .62 * D)), xb = Math.min(band.width, Math.round(lx + .42 * D));
+  const lw = Math.max(3, Math.round(D * .045));
+  const xa = Math.max(0, Math.round(lx - .66 * D)), xb = Math.min(band.width, Math.round(lx + .4 * D));
   const wl = Math.round(lx - lw) - xa, wr = xb - Math.round(lx + lw), hh = Math.round(yBot - yTop);
   if (wl < 8 || wr < 4 || hh < 8) return null;
   const k = Math.max(1, Math.min(3, 64 / hh)), pad = Math.round(hh * k * .35);
@@ -1248,26 +1255,231 @@ async function lineValue(band, lx, D, yTop, yBot){
   x.drawImage(band, Math.round(lx + lw), yTop, wr, hh, pad + wl * k, pad, wr * k, hh * k);   // digit right of the line, pulled close
   // black and white (Otsu threshold)
   const im = x.getImageData(0, 0, c.width, c.height), d = im.data, hist = new Float64Array(256);
-  for (let i = 0; i < d.length; i += 4) hist[d[i]]++;
-  let tot = d.length / 4, sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
+  for (let y = pad; y < c.height - pad; y++) for (let xx = pad; xx < c.width - pad; xx++) hist[d[(y * c.width + xx) * 4]]++;   // threshold from the cell itself, not the white border
+  let tot = 0, sum = 0; for (let t = 0; t < 256; t++){ sum += t * hist[t]; tot += hist[t]; }
   let wB = 0, sB = 0, best = 0, thr = 128;
   for (let t = 0; t < 256; t++){ wB += hist[t]; if (!wB) continue; const wF = tot - wB; if (!wF) break; sB += t * hist[t];
     const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) * (mB - mF); if (v > best){ best = v; thr = t; } }
   for (let i = 0; i < d.length; i += 4){ const v = d[i] > thr ? 255 : 0; d[i] = d[i + 1] = d[i + 2] = v; }
+  // clean up: drop long horizontal runs (the tape's middle line), tall thin lines, tick marks touching the bottom, specks
+  { const cw = c.width, ch = c.height;
+    for (let y = 0; y < ch; y++){ let run = 0; for (let x = 0; x <= cw; x++){ const dark = x < cw && !d[(y * cw + x) * 4]; if (dark) run++; else { if (run > cw * .4) for (let z = x - run; z < x; z++){ const k = (y * cw + z) * 4; d[k] = d[k + 1] = d[k + 2] = 255; } run = 0; } } } }
+  { const cw = c.width, ch = c.height, lab = new Int32Array(cw * ch).fill(-1), st = [], comps = [];
+    for (let s0 = 0; s0 < cw * ch; s0++){
+      if (d[s0 * 4] || lab[s0] >= 0) continue;
+      let x0 = cw, x1 = -1, y0 = ch, y1 = -1; const px = []; st.push(s0); lab[s0] = s0;
+      while (st.length){ const k = st.pop(), xx = k % cw, yy = (k / cw) | 0; px.push(k);
+        if (xx < x0) x0 = xx; if (xx > x1) x1 = xx; if (yy < y0) y0 = yy; if (yy > y1) y1 = yy;
+        for (const n of [k - 1, k + 1, k - cw, k + cw]){ if (n < 0 || n >= cw * ch || lab[n] >= 0 || d[n * 4]) continue; if ((n === k - 1 && xx === 0) || (n === k + 1 && xx === cw - 1)) continue; lab[n] = s0; st.push(n); } }
+      const w = x1 - x0 + 1, h = y1 - y0 + 1;
+      const edge = x1 >= cw - pad - 2 && x0 > cw * .6;   // cut off at the right side: the start of the next number
+      const wide = w > cw * .55 && h < ch * .2, tick = y1 >= ch - 2 - pad && w < ch * .12, speck = px.length < ch * ch * .002, pole = w < cw * .07 && h > (ch - 2 * pad) * .62;
+      if (wide || tick || speck || pole || edge) for (const k of px) d[k * 4] = d[k * 4 + 1] = d[k * 4 + 2] = 255;
+      else comps.push({ px, x0, x1, y0, y1, n: px.length });
+    }
+    // keep only marks in the digit row: same height band as the biggest mark, not tiny next to it (dirt, scratches)
+    if (comps.length){
+      const maxN = Math.max(...comps.map(q => q.n));                       // the number row next to the ticks: the lowest clear mark
+      const big = comps.filter(q => q.n >= maxN * .3).reduce((a, b) => (b.y0 + b.y1) > (a.y0 + a.y1) + 2 || (Math.abs((b.y0 + b.y1) - (a.y0 + a.y1)) <= 2 && b.n > a.n) ? b : a), bh = big.y1 - big.y0 + 1;
+      for (const q of comps){ const yc = (q.y0 + q.y1) / 2;
+        if (q !== big && (q.n < big.n * .12 || yc < big.y0 - .2 * bh || yc > big.y1 + .2 * bh || (q.y1 - q.y0 + 1) < bh * .35)) for (const k of q.px) d[k * 4] = d[k * 4 + 1] = d[k * 4 + 2] = 255; }
+    } }
   x.putImageData(im, 0, 0);
-  const reads = [];
-  for (const psm of ['8', '7']){
+  { let x0 = c.width, x1 = -1, y0 = c.height, y1 = -1;
+    for (let y = 0; y < c.height; y++) for (let xx = 0; xx < c.width; xx++) if (!d[(y * c.width + xx) * 4]){ if (xx < x0) x0 = xx; if (xx > x1) x1 = xx; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 < 0) return null;
+    const bw = x1 - x0 + 1, bh = y1 - y0 + 1, z = Math.max(.5, Math.min(4, 48 / bh)), m = 24;
+    const c2 = document.createElement('canvas'); c2.width = Math.round(bw * z) + 2 * m; c2.height = Math.round(bh * z) + 2 * m;
+    const x2 = c2.getContext('2d'); x2.fillStyle = '#fff'; x2.fillRect(0, 0, c2.width, c2.height); x2.imageSmoothingEnabled = false;
+    x2.drawImage(c, x0, y0, bw, bh, m, m, bw * z, bh * z);
+    c.width = c2.width; c.height = c2.height; x.drawImage(c2, 0, 0); }
+  for (const psm of ['8', '7', '10']){                                    // word, line, single character
     const syms = await ocrSyms(c, psm);
     const t = syms.filter(q => /^\d$/.test(q.t)).map(q => q.t).join('');      // reading order from the reader (its letter boxes are not reliable)
-    if (/^\d{2,4}$/.test(t) && t[0] !== '0') reads.push(+t);
-    if (reads.length && psm === '8') break;
+    if (/^\d$/.test(t) || (/^\d{2,4}$/.test(t) && t[0] !== '0')) return t;
   }
-  return reads.length ? reads[0] : null;
+  return null;
+}
+
+/* small ticks between two cm lines: about 10 on a cm scale, 16 or 8 on an inch scale (looked for near the tape edge) */
+function tickRatio(band, D, y0f, y1f){
+  const W = band.width, H = band.height, ya = Math.round(H * y0f), yh = Math.max(2, Math.round(H * (y1f - y0f)));
+  const d = band.getContext('2d', { willReadFrequently: true }).getImageData(0, ya, W, yh).data, col = new Float32Array(W);
+  for (let y = 0; y < yh; y++) for (let x = 0; x < W; x++) col[x] += d[(y * W + x) * 4];
+  const cs = new Float32Array(W + 1); for (let x = 0; x < W; x++) cs[x + 1] = cs[x] + col[x];
+  const hw = Math.max(2, Math.round(D / 8)), q = new Float32Array(W); let e = 0;
+  for (let x = 0; x < W; x++){ const a = Math.max(0, x - hw), b = Math.min(W, x + hw + 1); q[x] = col[x] - (cs[b] - cs[a]) / (b - a); e += q[x] * q[x]; }
+  if (!e) return 0;
+  let best = 0, bl = 0;
+  for (let lag = Math.max(2, Math.floor(D / 22)); lag <= Math.ceil(D / 5); lag++){
+    let s = 0; for (let x = 0; x + lag < W; x++) s += q[x] * q[x + lag];
+    s = s / e * W / (W - lag); if (s > best){ best = s; bl = lag; }
+  }
+  return best > .15 ? D / bl : 0;
+}
+
+/* tape colour near the tip: yellow tape -> use the green channel */
+function tapeChannel(src, W, H, tx, ty){
+  const r = Math.round(.06 * Math.max(W, H)), c = document.createElement('canvas'); c.width = c.height = 64;
+  const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(src, tx - r, ty - r, 2 * r, 2 * r, 0, 0, 64, 64);
+  const d = x.getImageData(0, 0, 64, 64).data, px = [];
+  for (let i = 0; i < d.length; i += 4) px.push([d[i], d[i + 1], d[i + 2], d[i] + d[i + 1] + d[i + 2]]);
+  px.sort((a, b) => b[3] - a[3]); const top = px.slice(0, px.length * .3);
+  const m = [0, 1, 2].map(k => top.reduce((s, p) => s + p[k], 0) / top.length);
+  return m[2] < .7 * Math.min(m[0], m[1]) && m[1] > 90 ? 'g' : 'l';
+}
+
+/* row brightness profile of a straight strip near the tip (columns around the tip only) */
+function rowProfile(strip, frac){
+  const W = strip.width, H = strip.height, x0 = Math.round(W * (.5 - frac)), w = Math.round(W * frac * 2);
+  const d = strip.getContext('2d', { willReadFrequently: true }).getImageData(x0, 0, w, H).data, r = new Float32Array(H);
+  for (let y = 0; y < H; y++){ let s = 0; for (let x = 0; x < w; x++) s += d[(y * w + x) * 4]; r[y] = s / w; }
+  return r;
+}
+/* fine direction: the angle where the tape edge is sharpest */
+function edgeAngle(src, W, H, tx, ty, a0, chan){
+  const M = Math.max(W, H), sc = Math.min(1, 420 / (.4 * M));
+  let best = a0, bestE = -1;
+  for (let a = a0 - 8; a <= a0 + 8; a += .5){
+    const st = tapeStrip(src, W, H, tx, ty, a, .2 * M, .12 * M, sc, 0, chan), r = rowProfile(st, .45);
+    let e = 0; for (let y = 2; y < r.length - 2; y++) e = Math.max(e, Math.abs(r[y + 2] - r[y - 2]));
+    if (e > bestE){ bestE = e; best = a; }
+  }
+  return best;
+}
+/* fine direction from the mm ticks: the angle where the tick row is longest and clearest */
+function tickAngle(src, W, H, tx, ty, a0, chan){
+  const M = Math.max(W, H), s1 = Math.min(2, 260 / (.12 * M));
+  const score = (a) => {                     // ticks averaged down the tick rows stay as sharp as one row only when the strip is straight
+    const st = tapeStrip(src, W, H, tx, ty, a, .1 * M, .06 * M, s1, 0, chan), t = tickRows(st);
+    if (!t || t.p < 3) return 0;
+    const Wd = st.width, n = t.yb - t.yt + 1, d = st.getContext('2d', { willReadFrequently: true }).getImageData(0, t.yt, Wd, n).data, m = new Float32Array(Wd);
+    const acAt = (r) => { let mean = 0; for (let x = 0; x < Wd; x++) mean += r[x] / Wd; let b = 0;
+      for (let lag = Math.max(3, t.p - 2); lag <= t.p + 2; lag++){ let s2 = 0; for (let x = 0; x + lag < Wd; x++) s2 += (r[x] - mean) * (r[x + lag] - mean); b = Math.max(b, s2 / Wd); } return b; };
+    let single = 0; const r = new Float32Array(Wd);
+    for (let y = 0; y < n; y++){ for (let x = 0; x < Wd; x++){ r[x] = d[(y * Wd + x) * 4]; m[x] += r[x] / n; } single += acAt(r) / n; }
+    return single > 0 ? acAt(m) / single * Math.sqrt(Math.min(n, 3 * t.p)) : 0;
+  };
+  const sc = []; for (let a = a0 - 20; a <= a0 + 20; a += 2) sc.push({ a, v: score(a) });
+  const peaks = sc.filter((p, i) => p.v > 0 && (i === 0 || p.v >= sc[i - 1].v) && (i === sc.length - 1 || p.v >= sc[i + 1].v)).sort((p, q) => q.v - p.v);
+  const out = [];
+  for (const p of peaks.slice(0, 2)){
+    if (p.v < .6 * peaks[0].v) break;
+    let best = p.a, bs = p.v;
+    for (const d of [-1, 1, -.5, .5]){ const a = (d === -.5 || d === .5 ? best : p.a) + d, v = score(a); if (v > bs){ bs = v; best = a; } }
+    out.push(best);
+  }
+  return out;
+}
+/* the tape between the edge at the tip and the opposite edge: returns [yTop, yBottom] in strip rows, tape upright */
+function tapeBand(strip, tipY, M){
+  const r = rowProfile(strip, .2), H = r.length, g = new Float32Array(H);
+  for (let y = 2; y < H - 2; y++) g[y] = r[y + 2] - r[y - 2];              // + going down into brighter, - into darker
+  const near = [];                                                           // edges near the tip
+  for (let y = 3; y < H - 3; y++) if (Math.abs(g[y]) >= Math.abs(g[y - 1]) && Math.abs(g[y]) > Math.abs(g[y + 1]) && Math.abs(y - tipY) <= .045 * M) near.push(y);
+  const out = [];
+  for (const e of near){
+    const down = g[e] > 0;                                                     // tape lies below this edge if it gets brighter going down
+    const lo = down ? e + Math.round(.025 * M) : Math.max(2, e - Math.round(.22 * M)), hi = down ? Math.min(H - 3, e + Math.round(.22 * M)) : e - Math.round(.025 * M);
+    let f = null; for (let y = lo; y <= hi; y++) if ((down ? g[y] < 0 : g[y] > 0) && (f == null || Math.abs(g[y]) > Math.abs(g[f]))) f = y;
+    if (f == null) continue;
+    const a = Math.min(e, f), b = Math.max(e, f); let inside = 0; for (let y = a; y <= b; y++) inside += r[y]; inside /= (b - a + 1);
+    out.push({ a, b, s: Math.abs(g[e]) + Math.abs(g[f]) + inside / 4 });
+  }
+  out.sort((p, q) => q.s - p.s);
+  return out.length ? [out[0].a, out[0].b] : null;
+}
+
+/* rows of mm ticks at the bottom of the band: a clear repeat (period 4..40 px) along the row. Returns { yt, yb, p } */
+function tickRows(band, bottom){
+  const W = band.width, H = band.height, d = band.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data;
+  const per = new Float32Array(H), lagOf = new Int16Array(H), row = new Float32Array(W), q = new Float32Array(W), cs = new Float32Array(W + 1), ac = new Float32Array(42);
+  for (let y = 0; y < H; y++){
+    for (let x = 0; x < W; x++){ row[x] = d[(y * W + x) * 4]; cs[x + 1] = cs[x] + row[x]; }
+    let e = 0; for (let x = 0; x < W; x++){ const a = Math.max(0, x - 7), b = Math.min(W, x + 8); q[x] = row[x] - (cs[b] - cs[a]) / (b - a); e += q[x] * q[x]; }   // remove slow changes
+    if (e < W * 30) continue;
+    for (let lag = 2; lag <= 41; lag++){ let s2 = 0; for (let x = 0; x + lag < W; x++) s2 += q[x] * q[x + lag]; ac[lag] = s2 / e * W / (W - lag); }
+    let best = 0, bl = 0;
+    for (let lag = 4; lag <= 40; lag++) if (ac[lag] > ac[lag - 1] && ac[lag] >= ac[lag + 1] && ac[lag] > best){ best = ac[lag]; bl = lag; }   // a real repeat peak
+    for (let lag = 4; lag < bl * .7; lag++) if (ac[lag] > ac[lag - 1] && ac[lag] >= ac[lag + 1] && ac[lag] >= .75 * best && Math.abs(bl / lag - Math.round(bl / lag)) < .15){ best = ac[lag]; bl = lag; break; }   // the base spacing, not a multiple of it
+    per[y] = best; lagOf[y] = bl;
+  }
+  const runs = [];
+  for (let y = 0; y < H; y++){                                          // runs of tick rows with the same spacing
+    if (per[y] <= .35) continue;
+    let z = y, sum = 0; while (z < H && per[z] > .3 && Math.abs(lagOf[z] - lagOf[y]) <= 2){ sum += per[z]; z++; }
+    if (z - y >= 3) runs.push({ yt: y, yb: z - 1, s: sum });
+    y = z;
+  }
+  if (!runs.length) return null;
+  const top = Math.max(...runs.map(r => r.s));                          // the strongest, or (bottom = true) the lowest clear one: the ticks on the tip edge
+  const pick = bottom ? runs.filter(r => r.s >= .4 * top).pop() : runs.find(r => r.s === top);
+  const yt = pick.yt, yb = pick.yb, bestS = pick.s;
+  const lags = []; for (let y = yt; y <= yb; y++) if (lagOf[y]) lags.push(lagOf[y]); lags.sort((a, b) => a - b);
+  return { yt, yb, s: bestS, p: lags[lags.length >> 1] || 0, per: Array.from(per, v => +v.toFixed(2)), lag: Array.from(lagOf) };
+}
+
+/* cm scale or inch scale? Tick lengths repeat every 10 ticks on a cm scale (long at each cm, medium at 5 mm),
+   every 16 / 8 ticks on an inch scale. Returns the repeat strength at 10 ticks over the best of 8 and 16 (> 1 = cm). */
+function scaleKind(band, tr){
+  const W = band.width, P = tr.p, y0 = Math.max(0, Math.round(tr.yt - 4 * P)), y1 = Math.min(band.height, tr.yb + 1), H = y1 - y0;
+  const d = band.getContext('2d', { willReadFrequently: true }).getImageData(0, y0, W, H).data, k = Math.max(2, Math.round(P / 3)), L = new Float32Array(W);
+  for (let x = k; x < W - k; x++){ let n = 0; for (let y = 0; y < H; y++){ const r = y * W; if (d[(r + x) * 4] < Math.min(d[(r + x - k) * 4], d[(r + x + k) * 4]) - 14) n++; } L[x] = n; }
+  let m = 0; for (let x = 0; x < W; x++) m += L[x] / W; for (let x = 0; x < W; x++) L[x] -= m;
+  const ac = (lag) => { let b = -1e9; for (let l = Math.round(lag * .95); l <= Math.round(lag * 1.05); l++){ let s2 = 0; for (let x = 0; x + l < W; x++) s2 += L[x] * L[x + l]; b = Math.max(b, s2 / (W - l)); } return b; };
+  const a10 = ac(10 * P), a8 = ac(8 * P), a16 = 16 * P < W * .8 ? ac(16 * P) : -1e9;
+  return a10 / Math.max(1e-6, a8, a16);
+}
+
+/* cm lines from the mm tick spacing P: a cm is 10 ticks. Fit the grid (spacing ~10P, best position) on the line profile,
+   then take each line at its strongest spot. Faint lines still count if they sit where the grid says. */
+function cmGrid(band, P, Z){
+  const s = lineProfile(band, Z).s, W = band.width;
+  let best = null;
+  for (let D = 9.3 * P; D <= 10.7 * P; D += Math.max(.5, P / 8)){
+    const win = Math.max(2, Math.round(D * .045));
+    for (let ph = 0; ph < D; ph += 1){
+      let sc = 0, n = 0;
+      for (let x0 = ph; x0 < W; x0 += D){ let m = 0; for (let x = Math.max(0, Math.round(x0 - win)); x <= Math.min(W - 1, Math.round(x0 + win)); x++) if (s[x] > m) m = s[x]; sc += m; n++; }
+      sc /= Math.max(1, n);
+      if (!best || sc > best.sc) best = { sc, D, ph };
+    }
+  }
+  if (!best || best.sc < .25) return null;
+  const lines = [], win = Math.max(2, Math.round(best.D * .06));
+  for (let x0 = best.ph; x0 < W; x0 += best.D){
+    let bx = Math.round(x0), m = -1; for (let x = Math.max(0, Math.round(x0 - win)); x <= Math.min(W - 1, Math.round(x0 + win)); x++) if (s[x] > m){ m = s[x]; bx = x; }
+    lines.push({ x: m >= .2 ? bx : x0, s: m, found: m >= .2 });
+  }
+  lines.D = best.D; lines.score = best.sc;
+  return lines;
+}
+
+/* the tape edges where the cm ticks can be, with the tape above (scale upright, ticks along that edge). Returns rows, best first.
+   A: the product edge is the tick edge (tape above the tip).  B: the product touches the other edge (tape below the tip):
+   then the ticks run along the far edge of the tape, below. */
+function tipEdges(strip, tipY, M){
+  const r = rowProfile(strip, .2), H = r.length, g = new Float32Array(H);
+  for (let y = 2; y < H - 2; y++) g[y] = r[y + 2] - r[y - 2];
+  const peak = (y) => Math.abs(g[y]) >= Math.abs(g[y - 1]) && Math.abs(g[y]) > Math.abs(g[y + 1]);
+  let dk = null, br = null;
+  for (let y = 3; y < H - 3; y++){
+    if (Math.abs(y - tipY) > .045 * M || !peak(y)) continue;
+    if (g[y] < 0 && (dk == null || g[y] < g[dk])) dk = y;                   // going down it gets darker: tape above, background below
+    if (g[y] > 0 && (br == null || g[y] > g[br])) br = y;                   // going down it gets brighter: tape below
+  }
+  const out = [];
+  if (dk != null && -g[dk] > 12) out.push(dk);
+  if (br != null && g[br] > 12){
+    let f = null; for (let y = br + Math.round(.03 * M); y < Math.min(H - 3, br + .2 * M); y++) if (g[y] < 0 && peak(y) && (f == null || g[y] < g[f])) f = y;
+    if (f != null && -g[f] > 12) out.push(f);
+  }
+  return out;
 }
 
 /* full check: photo (canvas or image), arrow tip in photo pixels -> { mm, ... } or { mm: null, why } */
 async function readTapeAt(src, W, H, tx, ty, O){
-  O = Object.assign({ len: .25, wid: .12, digitPx: 46, budget: 15000, stop: () => false }, O || {});
+  O = Object.assign({ budget: 15000, stop: () => false }, O || {});
   const t0 = performance.now(), M = Math.max(W, H), done = (o) => Object.assign(o, { ms: Math.round(performance.now() - t0) });
   const late = () => performance.now() - t0 > O.budget || O.stop();      // time limit, or the arrow was moved again
   const side = Math.round(.6 * Math.min(W, H));
@@ -1277,66 +1489,83 @@ async function readTapeAt(src, W, H, tx, ty, O){
   gx.drawImage(src, tx - side / 2, ty - side / 2, side, side, 0, 0, 320, 320);
   const angs = tapeAngles(greyFrom(gx, 320, 320), 320, 320);
   if (!angs.length) return done({ mm: null, why: 'no tape at the arrow' });
+  const chan = tapeChannel(src, W, H, tx, ty);
   await ocrWorker();
-  const halfLen = O.len * M, halfWid = O.wid * M, wantDigits = O.expect ? String(Math.floor(O.expect / 10)).length : 0;
-  const results = [];
-  for (const a of angs) for (const ang of [a, a + 180]){
+  const want = O.expect ? O.expect / 10 : null, results = [], halfLen = .25 * M;
+  for (const a0 of angs){
     if (late()) break;
-    // 1. quick pass: where is the row of cm numbers?
-    const strip = tapeStrip(src, W, H, tx, ty, ang, halfLen, halfWid, 1);
-    const rows = symRows(await ocrSyms(strip, '11')).slice(0, 3);
-    for (const r0 of rows) for (const hf of [1, 1.4, .7]){
+    const fa = edgeAngle(src, W, H, tx, ty, a0, chan), tas = tickAngle(src, W, H, tx, ty, a0, chan);
+    const tryAngs = [fa, fa + 180];
+    for (const ta of tas) if (tryAngs.every(q => Math.abs(((ta - q) % 180 + 270) % 180 - 90) > 1.5)) tryAngs.push(ta, ta + 180);
+    for (const ang of tryAngs){
       if (late()) break;
-      const r = { y: r0.y, h: r0.h * hf };
-      // 2. tall band: the number row and the tick edge below it, enlarged so digits are ~46 px high
-      const sc = Math.max(1, Math.min(3, O.digitPx / r.h)), top = r.y - .8 * r.h, bot = r.y + 1.8 * r.h;
-      const cy = (top + bot) / 2 - strip.height / 2, hw = (bot - top) / 2;
-      let band = tapeStrip(src, W, H, tx, ty, ang, halfLen, hw, sc, cy), bestSh = lineSharpness(band, 5), bang = ang;
-      for (let da = -6; da <= 6; da += 1.5){                            // straighten: cm lines exactly upright
-        if (!da) continue;
-        const b2 = tapeStrip(src, W, H, tx, ty, ang + da, halfLen, hw, sc, cy), sh = lineSharpness(b2, 5);
-        if (sh > bestSh + .05){ bestSh = sh; band = b2; bang = ang + da; }
+      // 1. the tape edge at the tip (tape above it), in a straight strip around the tip
+      const strip = tapeStrip(src, W, H, tx, ty, ang, halfLen, .25 * M, 1, 0, chan), tipY = strip.height / 2;
+      const edges = tipEdges(strip, tipY, M);
+      { // the tick row itself marks the edge too (the tape and the product can look alike in grey, e.g. yellow tape on light metal)
+        const s1 = Math.min(3, 340 / (.12 * M)), bt = tapeStrip(src, W, H, tx, ty, ang, halfLen, .06 * M, s1, 0, chan), tt = tickRows(bt);
+        if (tt && tt.p >= 3){ const ye = tipY + (tt.yb + 1 - bt.height / 2) / s1; if (!edges.some(q => Math.abs(q - ye) < .012 * M)) edges.push(Math.round(ye)); }
       }
-      const lines = gridLines(band, r.h * sc);
-      if (!lines || lines.length < 2) continue;
-      // 3. the cm lines on both sides of the arrow, and the number printed on each
+      if (!edges.length){ results.push({ mm: null, why: 'tape edge not clear at the arrow' }); continue; }
+      for (const e of edges){
+      if (late()) break;
+      // 2. find the mm ticks along that edge and their spacing, then cut the scale: ~10 mm deep, enlarged to ~14 px per mm
+      const span = .2 * M, sc0 = Math.min(3, 340 / span);
+      const band0 = tapeStrip(src, W, H, tx, ty, ang, halfLen, span / 2, sc0, e - span / 2 + .01 * M - tipY, chan);
+      const tr0 = tickRows(band0, true);
+      if (!tr0 || tr0.p < 3){ results.push({ mm: null, why: 'tape ticks not clear' }); continue; }
+      const P0 = tr0.p / sc0, sc = Math.max(1, Math.min(5, 14 / P0)), yA = e - 11 * P0, yB = e + .8 * P0;
+      const cy = (yA + yB) / 2 - tipY, hw = (yB - yA) / 2;
+      const band = tapeStrip(src, W, H, tx, ty, ang, halfLen, hw, sc, cy, chan);
+      const tr = tickRows(band, true);
+      if (!tr || tr.p < 3){ results.push({ mm: null, why: 'tape ticks not clear' }); continue; }
+      const P = tr.p, Z = { dig: [Math.max(0, tr.yt - 6.5 * P), Math.max(2, tr.yt - .3 * P)], tick: [tr.yt, tr.yb + 1] }, tb = [e, P0];
+      const lines = cmGrid(band, P, Z);
+      if (!lines || lines.filter(l => l.found).length < 2){ results.push({ mm: null, why: 'tape lines not clear' }); continue; }
+      const kind = scaleKind(band, tr), ratio = kind > .3 ? 10 : 16;   // a clear inch pattern is refused; the number checks do the rest
+      // 3. the cm lines around the arrow, and the number printed at each ("10|6", or "1|" with "3|0" every 10 cm)
       const tip = band.width / 2;
       let ia = -1; for (let k = 0; k < lines.length; k++) if (lines[k].x <= tip) ia = k;
       const pick = [ia - 1, ia, ia + 1, ia + 2].filter(k => k >= 0 && k < lines.length);
-      const yTop = .2 * r.h * sc, yBot = 1.4 * r.h * sc;
       const vals = [];
-      for (const k of pick){ const v = await lineValue(band, lines[k].x, lines.D, yTop, yBot); vals.push({ k, v, x: lines[k].x }); }
-      // values must count up by one from line to line (or by 2 over a missing line)
-      let off = null, agree = 0;
-      for (const q of vals) if (q.v != null){
-        const o = q.v - q.k, n = vals.filter(z => z.v != null && z.v - z.k === o).length;
-        if (n > agree){ agree = n; off = o; }
+      for (const k of pick){ if (late()) break; const t = await lineValue(band, lines[k].x, lines.D, Math.round(Math.max(0, tr.yt - 6.2 * P)), Math.round(Math.min(band.height, tr.yt + .8 * P))); vals.push({ k, t }); }
+      // values must count up by one from line to line: full labels ("106", "30") fix the cm value, single digits only the last digit
+      const full = vals.filter(q => q.t && q.t.length >= 2), part = vals.filter(q => q.t && q.t.length === 1);
+      const tipK = Math.max(0, ia), cands = new Set(full.map(q => +q.t - q.k));
+      if (want != null) for (const q of part){ const m = ((+q.t - q.k) % 10 + 10) % 10; const base = Math.round(want - tipK); for (let o = base - 15; o <= base + 15; o++) if (((o % 10) + 10) % 10 === m) cands.add(o); }
+      let off = null, agree = 0, fullOk = 0, bestSc = -1e9;
+      for (const o of cands){
+        let s2 = 0, n = 0, f = 0;
+        for (const q of full) if (+q.t === o + q.k){ s2 += 2; n++; f++; }
+        if (f === 1 && want != null) s2 -= 1.6;                               // one full number alone may be misread (red "90" read as "20"): not enough to overrule
+        for (const q of part) if ((((o + q.k) % 10) + 10) % 10 === +q.t){ s2 += 1; n++; }
+        if (f < 2 && want != null) s2 -= Math.abs(o + tipK - want) / 100;      // decade not confirmed twice on the photo: the one closest to the typed size
+        if (s2 > bestSc){ bestSc = s2; off = o; agree = n; fullOk = f; }
       }
-      if (off == null || agree < 2) { results.push({ mm: null, why: 'tape numbers not readable', agree, vals: vals.map(q => q.v) }); continue; }
-      const lv = lines.map((l, k) => ({ v: k + off, x: l.x }));
+      const cmScale = ratio >= 8.5 && ratio <= 12;
+      if (off == null || agree < (fullOk ? 2 : 3) || !cmScale){ /* no full number confirmed: three lines must agree */ results.push({ mm: null, why: !cmScale && agree >= 2 ? 'not the cm scale' : 'tape numbers not readable', agree }); continue; }
       // 4. reading at the arrow between the two cm lines around it
+      const lv = lines.map((l, k) => ({ v: off + k, x: l.x }));
       let mm = null;
       for (let k = 0; k + 1 < lv.length; k++) if (tip >= lv[k].x && tip <= lv[k + 1].x){
-        const a = lv[k], b = lv[k + 1], gap = b.x - a.x;
-        if (gap > lines.D * 1.25) break;                                   // a line is missing here: not sure
-        mm = 10 * a.v + 10 * (tip - a.x) / gap;
+        const g2 = lv[k + 1].x - lv[k].x;
+        mm = 10 * lv[k].v + 10 * (tip - lv[k].x) / g2;
       }
-      if (mm == null){ const n = lv.reduce((m, q) => !m || Math.abs(q.x - tip) < Math.abs(m.x - tip) ? q : m, null); if (n && Math.abs(tip - n.x) <= lines.D * .6) mm = 10 * n.v + 10 * (tip - n.x) / lines.D; }
-      const digitsOk = !wantDigits || String(lv[0].v).length === wantDigits || String(lv[lv.length - 1].v).length === wantDigits;
-      results.push({ mm, agree, digitsOk, vals: vals.map(q => q.v), labels: lv.map(q => q.v), ang: bang, band, lines: lv, D: lines.D, sc,
+      if (mm == null){ const n2 = lv.reduce((m, q) => !m || Math.abs(q.x - tip) < Math.abs(m.x - tip) ? q : m, null); if (n2 && Math.abs(tip - n2.x) <= lines.D * .6) mm = 10 * n2.v + 10 * (tip - n2.x) / lines.D; }
+      results.push({ mm, agree, fullOk, decadeFromTyped: fullOk < 2, ratio, vals: vals.map(q => q.t), labels: lv.map(q => q.v), ang, band, lines: lv, D: lines.D, sc,
                      why: mm == null ? 'arrow is too far from a clear cm line' : '' });
-      if (mm != null && agree >= 3 && digitsOk) break;
+      if (mm != null && agree >= 3) break;
+      }
+      if (results.some(q => q.mm != null && q.agree >= 3)) break;
     }
-    const good = results.find(q => q.mm != null && q.agree >= 3 && q.digitsOk);
-    if (good) break;
+    if (results.some(q => q.mm != null && q.agree >= 3)) break;
   }
-  const ok = results.filter(q => q.mm != null && q.digitsOk).sort((p, q) => q.agree - p.agree);
   if (O.stop()) return done({ mm: null, why: 'cancelled', cancelled: true });
+  const ok = results.filter(q => q.mm != null).sort((p, q) => (q.fullOk > 1) - (p.fullOk > 1) || q.agree - p.agree);
   if (!ok.length){ const r0 = results.find(q => q.why) || {}; return done({ mm: null, why: r0.why || 'tape numbers not readable', tried: results.length }); }
   const b = ok[0];
-  return done({ mm: Math.round(b.mm * 2) / 2, why: '', labels: b.labels, vals: b.vals, agree: b.agree, lines: b.lines, d: b.D, pxPerMm: b.D / 10 / b.sc, ang: b.ang, strip: b.band });
+  return done({ mm: Math.round(b.mm * 2) / 2, why: '', decadeFromTyped: b.decadeFromTyped, ratio: b.ratio, labels: b.labels, vals: b.vals, agree: b.agree, lines: b.lines, d: b.D, pxPerMm: b.D / 10 / b.sc, ang: b.ang, strip: b.band });
 }
-
 
 const auto = { timer: null, prev: null, steadySince: 0, hist: [], start: 0, lastFocus: 0 };
 const acv = document.createElement('canvas'); acv.width = 240; acv.height = 180;
@@ -1500,7 +1729,7 @@ function finish(){
   if (flags.length) remark += ` [CHECK PHOTO: ${flags.join('; ')}]`;
   const aiOk = [], aiBad = [], aiUn = [], aiOff = [];
   [[W, 'W'], [Ln, 'L']].forEach(([d, n]) => { if (d.status !== 'done' || !d.ai) return;
-    if (d.ai.status === 'ok') aiOk.push(n); else if (d.ai.status === 'mismatch') aiBad.push(`${n} typed ${fmm(d.value)}, photo ${fmm(d.ai.mm)}`);
+    if (d.ai.status === 'ok') aiOk.push(n + (d.ai.part ? ' (cm digits)' : '')); else if (d.ai.status === 'mismatch') aiBad.push(`${n} typed ${fmm(d.value)}, photo ${fmm(d.ai.mm)}`);
     else if (d.ai.status === 'unread') aiUn.push(n); else aiOff.push(n); });
   if (aiOk.length) remark += ` [AI read ${aiOk.join('+')}: OK]`;
   if (aiBad.length) remark += ` [CHECK READING: ${aiBad.join('; ')}]`;
