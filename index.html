@@ -382,7 +382,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 
 <script>
 /* ============ SETTINGS: paste your NEW Apps Script Web App URL between the quotes ============ */
-const APP_VERSION = 'R8';
+const APP_VERSION = 'R9';
 const DEFAULT_SHEET_URL = 'https://script.google.com/macros/s/AKfycbx4jz-03IVSxS_Bh2ttXY6xGa-dZQk601rCkIwTjpTxiJkyKeU1cMRSl7mIXXbvXpCFPQ/exec';   // Code List 2
 /* Minor band: reading outside the tolerance by up to this many mm = yellow "minor, still acceptable".
    Further out = red FAIL. Example: spec 894, tolerance ±1, band 1 → 893–895 pass, 892 / 896 minor, 891 / 897 and beyond fail. */
@@ -1208,9 +1208,11 @@ function symRows(syms){                               // rows of digits found by
 }
 
 /* tape direction: score every angle (3 degree steps) by how strong the tick pattern is; return the best 2 different ones */
-function tapeAngles(g, w, h){
+/* let the screen draw between steps, so the arrow and buttons never freeze while the AI reads */
+const breathe = () => new Promise(r => setTimeout(r, 0));
+async function tapeAngles(g, w, h){
   const sc = [];
-  for (let a = 0; a < 180; a += 3){ const r = tapeDetect(g, w, h, { step: 2, thr: .42, coh: .5, minRun: 3, angles: [a], bilinear: true }); if (r.run >= 3) sc.push({ a, s: r.score }); }
+  for (let a = 0; a < 180; a += 3){ if (a % 18 === 0) await breathe(); const r = tapeDetect(g, w, h, { step: 2, thr: .42, coh: .5, minRun: 3, angles: [a], bilinear: true }); if (r.run >= 3) sc.push({ a, s: r.score }); }
   sc.sort((p, q) => q.s - p.s);
   const out = [];
   for (const c of sc){ if (out.every(o => Math.min(Math.abs(o.a - c.a), 180 - Math.abs(o.a - c.a)) >= 15)) out.push(c); if (out.length === 2) break; }
@@ -1337,10 +1339,11 @@ function rowProfile(strip, frac){
   return r;
 }
 /* fine direction: the angle where the tape edge is sharpest */
-function edgeAngle(src, W, H, tx, ty, a0, chan){
+async function edgeAngle(src, W, H, tx, ty, a0, chan){
   const M = Math.max(W, H), sc = Math.min(1, 420 / (.4 * M));
   let best = a0, bestE = -1;
   for (let a = a0 - 8; a <= a0 + 8; a += .5){
+    if ((a - a0) % 2 === 0) await breathe();
     const st = tapeStrip(src, W, H, tx, ty, a, .2 * M, .12 * M, sc, 0, chan), r = rowProfile(st, .45);
     let e = 0; for (let y = 2; y < r.length - 2; y++) e = Math.max(e, Math.abs(r[y + 2] - r[y - 2]));
     if (e > bestE){ bestE = e; best = a; }
@@ -1348,7 +1351,7 @@ function edgeAngle(src, W, H, tx, ty, a0, chan){
   return best;
 }
 /* fine direction from the mm ticks: the angle where the tick row is longest and clearest */
-function tickAngle(src, W, H, tx, ty, a0, chan){
+async function tickAngle(src, W, H, tx, ty, a0, chan){
   const M = Math.max(W, H), s1 = Math.min(2, 260 / (.12 * M));
   const score = (a) => {                     // ticks averaged down the tick rows stay as sharp as one row only when the strip is straight
     const st = tapeStrip(src, W, H, tx, ty, a, .1 * M, .06 * M, s1, 0, chan), t = tickRows(st);
@@ -1360,13 +1363,13 @@ function tickAngle(src, W, H, tx, ty, a0, chan){
     for (let y = 0; y < n; y++){ for (let x = 0; x < Wd; x++){ r[x] = d[(y * Wd + x) * 4]; m[x] += r[x] / n; } single += acAt(r) / n; }
     return single > 0 ? acAt(m) / single * Math.sqrt(Math.min(n, 3 * t.p)) : 0;
   };
-  const sc = []; for (let a = a0 - 20; a <= a0 + 20; a += 2) sc.push({ a, v: score(a) });
+  const sc = []; for (let a = a0 - 20; a <= a0 + 20; a += 2){ await breathe(); sc.push({ a, v: score(a) }); }
   const peaks = sc.filter((p, i) => p.v > 0 && (i === 0 || p.v >= sc[i - 1].v) && (i === sc.length - 1 || p.v >= sc[i + 1].v)).sort((p, q) => q.v - p.v);
   const out = [];
   for (const p of peaks.slice(0, 2)){
     if (p.v < .6 * peaks[0].v) break;
     let best = p.a, bs = p.v;
-    for (const d of [-1, 1, -.5, .5]){ const a = (d === -.5 || d === .5 ? best : p.a) + d, v = score(a); if (v > bs){ bs = v; best = a; } }
+    for (const d of [-1, 1, -.5, .5]){ await breathe(); const a = (d === -.5 || d === .5 ? best : p.a) + d, v = score(a); if (v > bs){ bs = v; best = a; } }
     out.push(best);
   }
   return out;
@@ -1487,22 +1490,24 @@ async function readTapeAt(src, W, H, tx, ty, O){
   const gx = g0.getContext('2d', { willReadFrequently: true });
   gx.fillStyle = '#808080'; gx.fillRect(0, 0, 320, 320);
   gx.drawImage(src, tx - side / 2, ty - side / 2, side, side, 0, 0, 320, 320);
-  const angs = tapeAngles(greyFrom(gx, 320, 320), 320, 320);
+  const angs = await tapeAngles(greyFrom(gx, 320, 320), 320, 320);
   if (!angs.length) return done({ mm: null, why: 'no tape at the arrow' });
   const chan = tapeChannel(src, W, H, tx, ty);
   await ocrWorker();
   const want = O.expect ? O.expect / 10 : null, results = [], halfLen = .25 * M;
   for (const a0 of angs){
     if (late()) break;
-    const fa = edgeAngle(src, W, H, tx, ty, a0, chan), tas = tickAngle(src, W, H, tx, ty, a0, chan);
+    const fa = await edgeAngle(src, W, H, tx, ty, a0, chan); if (late()) break; const tas = await tickAngle(src, W, H, tx, ty, a0, chan);
     const tryAngs = [fa, fa + 180];
     for (const ta of tas) if (tryAngs.every(q => Math.abs(((ta - q) % 180 + 270) % 180 - 90) > 1.5)) tryAngs.push(ta, ta + 180);
     for (const ang of tryAngs){
       if (late()) break;
+      await breathe();
       // 1. the tape edge at the tip (tape above it), in a straight strip around the tip
       const strip = tapeStrip(src, W, H, tx, ty, ang, halfLen, .25 * M, 1, 0, chan), tipY = strip.height / 2;
       const edges = tipEdges(strip, tipY, M);
       { // the tick row itself marks the edge too (the tape and the product can look alike in grey, e.g. yellow tape on light metal)
+        await breathe();
         const s1 = Math.min(3, 340 / (.12 * M)), bt = tapeStrip(src, W, H, tx, ty, ang, halfLen, .06 * M, s1, 0, chan), tt = tickRows(bt);
         if (tt && tt.p >= 3){ const ye = tipY + (tt.yb + 1 - bt.height / 2) / s1; if (!edges.some(q => Math.abs(q - ye) < .012 * M)) edges.push(Math.round(ye)); }
       }
@@ -1511,17 +1516,21 @@ async function readTapeAt(src, W, H, tx, ty, O){
       if (late()) break;
       // 2. find the mm ticks along that edge and their spacing, then cut the scale: ~10 mm deep, enlarged to ~14 px per mm
       const span = .2 * M, sc0 = Math.min(3, 340 / span);
+      await breathe();
       const band0 = tapeStrip(src, W, H, tx, ty, ang, halfLen, span / 2, sc0, e - span / 2 + .01 * M - tipY, chan);
       const tr0 = tickRows(band0, true);
       if (!tr0 || tr0.p < 3){ results.push({ mm: null, why: 'tape ticks not clear' }); continue; }
       const P0 = tr0.p / sc0, sc = Math.max(1, Math.min(5, 14 / P0)), yA = e - 11 * P0, yB = e + .8 * P0;
       const cy = (yA + yB) / 2 - tipY, hw = (yB - yA) / 2;
+      await breathe();
       const band = tapeStrip(src, W, H, tx, ty, ang, halfLen, hw, sc, cy, chan);
       const tr = tickRows(band, true);
       if (!tr || tr.p < 3){ results.push({ mm: null, why: 'tape ticks not clear' }); continue; }
       const P = tr.p, Z = { dig: [Math.max(0, tr.yt - 6.5 * P), Math.max(2, tr.yt - .3 * P)], tick: [tr.yt, tr.yb + 1] }, tb = [e, P0];
+      await breathe();
       const lines = cmGrid(band, P, Z);
       if (!lines || lines.filter(l => l.found).length < 2){ results.push({ mm: null, why: 'tape lines not clear' }); continue; }
+      await breathe();
       const kind = scaleKind(band, tr), ratio = kind > .3 ? 10 : 16;   // a clear inch pattern is refused; the number checks do the rest
       // 3. the cm lines around the arrow, and the number printed at each ("10|6", or "1|" with "3|0" every 10 cm)
       const tip = band.width / 2;
